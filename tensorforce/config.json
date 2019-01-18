@@ -1,0 +1,5 @@
+{
+    "model_dir": "models/test1",
+    "network_spec_file": "network.json",
+    "agent_spec_file": "dqn.json"
+}

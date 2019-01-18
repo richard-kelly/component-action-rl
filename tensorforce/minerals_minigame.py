@@ -1,28 +1,20 @@
 import sys
 import numpy as np
 import utils
+import json
 
-from tensorforce.agents import DQNAgent
+from tensorforce.agents import Agent
 
 from pysc2.agents import base_agent
 from pysc2.lib import actions
 
 FUNCTIONS = actions.FUNCTIONS
 
-# TODO: JSON config file here
-model_dir = 'models/test1'
+with open('config.json', 'r') as fp:
+    config = json.load(fp=fp)
 
 # to use:
 # python -m pysc2.bin.agent --map CollectMineralShards --agent minerals_minigame.TestAgent
-
-'''
-actions (spec, or dict of specs): Actions specification, with the following attributes (required):
-    - type: one of 'bool', 'int', 'float' (required).
-    - shape: integer, or list/tuple of integers (default: []).
-    - num_actions: integer (required if type == 'int').
-    - min_value and max_value: float (optional if type == 'float', default: none).
-'''
-
 
 class TestAgent(base_agent.BaseAgent):
 
@@ -71,93 +63,32 @@ class TestAgent(base_agent.BaseAgent):
     def setup(self, obs_spec, action_spec):
         super().setup(obs_spec, action_spec)
 
-        network_spec = [
-            [
-                dict(type='input', names=['screen']),
-                dict(
-                    size=32,
-                    type='conv2d',
-                    window=5,
-                    stride=1,
-                    padding='SAME',
-                    bias=True,
-                    activation='relu',
-                    l2_regularization=0.0,
-                    l1_regularization=0.0,
-                ),
-                dict(
-                    size=64,
-                    type='conv2d',
-                    window=3,
-                    stride=1,
-                    padding='SAME',
-                    bias=True,
-                    activation='relu',
-                    l2_regularization=0.0,
-                    l1_regularization=0.0,
-                ),
-                dict(
-                    size=64,
-                    type='conv2d',
-                    window=3,
-                    stride=1,
-                    padding='SAME',
-                    bias=True,
-                    activation='relu',
-                    l2_regularization=0.0,
-                    l1_regularization=0.0,
-                ),
-                dict(type='flatten'),
-                dict(type='dense', size=512),
-                dict(type='output', name='screen_net')
-            ],
-            [
-                dict(type='input', names=['screen_net', 'available_actions']),
-                dict(type='flatten'),
-                dict(type='dense', size=512),
-                dict(type='dense', size=512)
-            ]
-        ]
+        with open(config['network_spec_file'], 'r') as fp:
+            network_spec = json.load(fp=fp)
 
-        self.tfAgent = DQNAgent(
-            states=self.getStateSpec(obs_spec),
-            actions=self.getActionSpec(action_spec),
-            network=network_spec,
-            batching_capacity=10,
-            discount=0.99,
-            saver=dict(
-                directory=model_dir,
-                seconds=6000
-            ),
-            summarizer=dict(
-                directory=model_dir,
-                seconds=30,
-                labels=[
-                    'configuration',
-                    'losses',
-                    'inputs',
-                    'gradients_scalar'
-                ]
-            ),
-            update_mode=dict(
-                unit='timesteps',
-                batch_size=64,
-                frequency=8
-            ),
-            memory=dict(
-                type='replay',
-                include_next_states=True,
-                capacity=1000
-            ),
-            optimizer=dict(
-                type='adam',
-                learning_rate=1e-3
-            ),
-            actions_exploration=dict(
-                type="epsilon_anneal",
-                initial_epsilon=0.9,
-                final_epsilon=0.1,
-                timesteps=1000000
+        with open(config['agent_spec_file'], 'r') as fp:
+            agent_spec = json.load(fp=fp)
+
+        self.tfAgent = Agent.from_spec(
+            spec=agent_spec,
+            kwargs=dict(
+                states=self.getStateSpec(obs_spec),
+                actions=self.getActionSpec(action_spec),
+                network=network_spec,
+                saver=dict(
+                    directory=config['model_dir'],
+                    seconds=6000
+                ),
+                summarizer=dict(
+                    directory=config['model_dir'],
+                    seconds=30,
+                    labels=[
+                        'configuration',
+                        'losses',
+                        'inputs',
+                        'gradients_scalar'
+                    ]
+                )
             )
         )
 

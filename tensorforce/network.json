@@ -1,0 +1,72 @@
+[
+    [
+        {
+            "type": "input",
+            "names": "screen"
+        },
+        {
+            "size": 32,
+            "type": "conv2d",
+            "window": 5,
+            "stride": 1,
+            "padding": "SAME",
+            "bias": true,
+            "activation": "relu",
+            "l2_regularization": 0.0,
+            "l1_regularization": 0.0
+        },
+        {
+            "size": 64,
+            "type": "conv2d",
+            "window": 3,
+            "stride": 1,
+            "padding": "SAME",
+            "bias": true,
+            "activation": "relu",
+            "l2_regularization": 0.0,
+            "l1_regularization": 0.0
+        },
+        {
+            "size": 64,
+            "type": "conv2d",
+            "window": 3,
+            "stride": 1,
+            "padding": "SAME",
+            "bias": true,
+            "activation": "relu",
+            "l2_regularization": 0.0,
+            "l1_regularization": 0.0
+        },
+        {
+            "type": "flatten"
+        },
+        {
+            "type": "dense",
+            "size": 512
+        },
+        {
+            "type": "output",
+            "name": "screen_net"
+        }
+    ],
+    [
+        {
+            "type": "input",
+            "names": [
+                "screen_net",
+                "available_actions"
+            ]
+        },
+        {
+            "type": "flatten"
+        },
+        {
+            "type": "dense",
+            "size": 512
+        },
+        {
+            "type": "dense",
+            "size": 512
+        }
+    ]
+]
