@@ -1,5 +1,6 @@
 
 did 6M steps on collect mineral shards in about 2 days on the 1070
+about twice as fast on 1080ti machine
 
 obs_spec:
 {'action_result': (0,), 'alerts': (0,), 'available_actions': (0,), 'build_queue': (0, 7), 'cargo': (0, 7), 'cargo_slots_available': (1,), 'control_groups': (10, 2), 'game_loop': (1,), 'last_actions': (0,), 'multi_select': (0, 7), 'player': (11,), 'score_cumulative': (13,), 'score_by_category': (11, 5), 'score_by_vital': (3, 3), 'single_select': (0, 7), 'feature_screen': (17, 84, 84), 'feature_minimap': (7, 64, 64)}
@@ -39,3 +40,29 @@ Examples of actions the tf agent is returning:
 {'build_queue_id': array([2]), 'control_group_act': array([3]), 'control_group_id': array([1]), 'function': 329, 'minimap': array([31, 27]), 'queued': array([0]), 'screen': array([38,  7]), 'screen2': array([54, 40]), 'select_add': array([0]), 'select_point_act': array([1]), 'select_unit_act': array([0]), 'select_unit_id': array([331]), 'select_worker': array([3]), 'unload_id': array([135])}
 
 {'build_queue_id': array([7]), 'control_group_act': array([4]), 'control_group_id': array([5]), 'function': 125, 'minimap': array([62, 59]), 'queued': array([0]), 'screen': array([10, 40]), 'screen2': array([20, 16]), 'select_add': array([0]), 'select_point_act': array([1]), 'select_unit_act': array([0]), 'select_unit_id': array([452]), 'select_worker': array([2]), 'unload_id': array([170])}
+
+
+obs is a TimeStep - a namedtuple with:
+	step_type
+	reward
+	discount
+	observation - a dict with:
+		single_select
+		multi_select
+		build_queue
+		cargo
+		cargo_slots_available
+		feature_screen
+		feature_minimap
+
+		last_actions - list: function ids of some number of previous actions
+		action_result - list (usually size 1): results of previous action(s), using enum in sc2client-proto/sc2clientprotocol/error.proto
+		alerts - a list of size 0-2 indicating a major attack
+		game_loop - ?? probably number of frames or steps
+		score_cumulative - for scores see pysc2/lib/features.py
+		score_by_category
+		score_by_vital
+
+		player - list of general player information like player_id, minelas, vespene, suppy, etc.
+		control_groups
+		available_actions

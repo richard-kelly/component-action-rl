@@ -7,8 +7,12 @@ from tensorforce.agents import Agent
 
 from pysc2.agents import base_agent
 from pysc2.lib import actions
+from pysc2.env.environment import StepType
 
 FUNCTIONS = actions.FUNCTIONS
+
+# masking the actions functions so only these actions can be taken
+relevant_actions = [0, 1, 2, 3, 331]
 
 with open('config.json', 'r') as fp:
     config = json.load(fp=fp)
@@ -43,9 +47,12 @@ class TestAgent(base_agent.BaseAgent):
         return state
 
     def getActionSpec(self, action_spec):
-        all_actions = {'function': dict(type='int', num_actions=len(action_spec.functions))}
-        # version with limited actions to speed up learning of simple minigame
-        # all_actions = {'function': dict(type='int', num_actions=21)}
+        # ALL ACTIONS
+        # all_actions = {'function': dict(type='int', num_actions=len(action_spec.functions))}
+
+        # version with limited action functions to speed up learning of simple minigame
+        all_actions = {'function': dict(type='int', num_actions=len(relevant_actions))}
+
         for argument_type in action_spec.types:
             # the only arguments with a shape that isn't (1) are the screen and minimap ones,
             # so we're assuming the screen/minimap dimensions are square here
@@ -93,7 +100,10 @@ class TestAgent(base_agent.BaseAgent):
         )
 
     def getActionFunction(self, obs, action):
-        id = action['function']
+
+        # id = action['function']
+        # Masked actions instead
+        id = relevant_actions[action['function']]
 
         m = 'Ep. ' + str(self.episodes) + '/Step ' + str(self.steps) + ' '
 
@@ -105,19 +115,23 @@ class TestAgent(base_agent.BaseAgent):
         args = []
         for i in range(len(FUNCTIONS[id].args)):
             args.append(action[FUNCTIONS[id].args[i].name].tolist())
-        print(m + 'Valid action: ' + FUNCTIONS[id].name)
+        # print(m + 'Valid action: ' + FUNCTIONS[id].name)
         return actions.FunctionCall(id, args), True
 
     def step(self, obs):
         super().step(obs)
         state = self.preprocess_state(obs)
 
+        #print(obs.observation['game_loop'])
+        #print('reward: ', obs.reward)
+        terminal = True if obs.step_type is StepType.LAST else False
+
         if self.steps > 1:
             if self.validLastAction:
-                self.tfAgent.observe(terminal=False, reward=obs.reward)
+                self.tfAgent.observe(terminal=terminal, reward=obs.reward)
             else:
                 # self.tfAgent.observe(terminal=False, reward=obs.reward - 10e-3)
-                self.tfAgent.observe(terminal=False, reward=obs.reward)
+                self.tfAgent.observe(terminal=terminal, reward=obs.reward)
 
         action = self.tfAgent.act(state)
 
