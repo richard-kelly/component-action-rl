@@ -12,7 +12,7 @@ from pysc2.env.environment import StepType
 FUNCTIONS = actions.FUNCTIONS
 
 # masking the actions functions so only these actions can be taken
-relevant_actions = [0, 1, 2, 3, 331]
+relevant_actions = [0, 2, 3, 331]
 
 with open('config.json', 'r') as fp:
     config = json.load(fp=fp)
@@ -25,6 +25,8 @@ class TestAgent(base_agent.BaseAgent):
     def __init__(self):
         super().__init__()
         self.validLastAction = False
+        self.rewardCount = 0
+        self.episodeCount = 0
 
     def preprocess_state(self, obs):
         state = dict()
@@ -122,8 +124,19 @@ class TestAgent(base_agent.BaseAgent):
         super().step(obs)
         state = self.preprocess_state(obs)
 
-        #print(obs.observation['game_loop'])
-        #print('reward: ', obs.reward)
+        self.rewardCount += obs.reward
+
+        if obs.step_type is StepType.LAST:
+            self.episodeCount += 1
+            if self.episodeCount == 100:
+                out = open(config['reward_graph_file'], 'a')
+                out.write(str(self.rewardCount / 100) + '\n')
+                out.close()
+                self.rewardCount = 0
+                self.episodeCount = 0
+
+        # print(obs.observation['game_loop'])
+        # print('reward: ', obs.reward)
         terminal = True if obs.step_type is StepType.LAST else False
 
         if self.steps > 1:
