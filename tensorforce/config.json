@@ -1,6 +1,5 @@
 {
-    "model_dir": "models/test3",
-    "network_spec_file": "network_2.json",
-    "agent_spec_file": "dqn.json",
-    "reward_graph_file": "models/test3/rewards.txt"
+    "model_dir": "models/ppo3",
+    "network_spec_file": "networks/screen_cnn_only.json",
+    "agent_spec_file": "agents/ppo_cnn.json"
 }

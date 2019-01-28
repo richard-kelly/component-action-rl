@@ -36,7 +36,6 @@ class TestAgent(base_agent.BaseAgent):
         # everything is 3 dimensional before concat
         selected = np.expand_dims(obs.observation['feature_screen'].selected, axis=0)
         state['screen'] = np.concatenate((player_relative, selected), axis=0)
-
         obs.observation['available_actions']
         avail_actions = []
         for i in range(len(FUNCTIONS)):
@@ -48,19 +47,28 @@ class TestAgent(base_agent.BaseAgent):
 
         return state
 
-    def getActionSpec(self, action_spec):
+    def format_all_actions_spec(self, action_spec):
         # ALL ACTIONS
         # all_actions = {'function': dict(type='int', num_actions=len(action_spec.functions))}
 
         # version with limited action functions to speed up learning of simple minigame
         all_actions = {'function': dict(type='int', num_actions=len(relevant_actions))}
-
         for argument_type in action_spec.types:
             # the only arguments with a shape that isn't (1) are the screen and minimap ones,
             # so we're assuming the screen/minimap dimensions are square here
             spec = dict(type='int', shape=(len(argument_type.sizes),), num_actions=argument_type.sizes[0])
             all_actions[argument_type.name] = spec
         return all_actions
+
+    def format_some_actions_spec(self, action_spec):
+        return dict(
+            function=dict(type='int', num_actions=len(relevant_actions)),
+            screen=dict(type='int', shape=(1,), num_actions=84),
+            screen2=dict(type='int', shape=(1,), num_actions=84),
+            select_point_act=dict(type='int', shape=(1,), num_actions=4),
+            select_add=dict(type='int', shape=(1,), num_actions=2),
+            queued=dict(type='int', shape=(1,), num_actions=2)
+        )
 
     def getStateSpec(self, obs_spec):
         states = dict(
@@ -82,7 +90,7 @@ class TestAgent(base_agent.BaseAgent):
             spec=agent_spec,
             kwargs=dict(
                 states=self.getStateSpec(obs_spec),
-                actions=self.getActionSpec(action_spec),
+                actions=self.format_all_actions_spec(action_spec),
                 network=network_spec,
                 saver=dict(
                     directory=config['model_dir'],
@@ -92,6 +100,8 @@ class TestAgent(base_agent.BaseAgent):
                     directory=config['model_dir'],
                     seconds=30,
                     labels=[
+                        'graph',
+                        'total_loss',
                         'configuration',
                         'losses',
                         'inputs',
@@ -126,11 +136,12 @@ class TestAgent(base_agent.BaseAgent):
 
         self.rewardCount += obs.reward
 
+        # writes out the average reward every 100 episodes
         if obs.step_type is StepType.LAST:
             self.episodeCount += 1
             if self.episodeCount == 100:
-                out = open(config['reward_graph_file'], 'a')
-                out.write(str(self.rewardCount / 100) + '\n')
+                out = open(config['model_dir'] + '/rewards.txt', 'a')
+                out.write(str(self.steps) + ", " + str((self.rewardCount / 100)) + '\n')
                 out.close()
                 self.rewardCount = 0
                 self.episodeCount = 0

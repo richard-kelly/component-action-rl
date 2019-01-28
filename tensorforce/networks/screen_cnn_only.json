@@ -31,5 +31,9 @@
     {
         "type": "dense",
         "size": 1024
+    },
+    {
+        "type": "dense",
+        "size": 1024
     }
 ]
