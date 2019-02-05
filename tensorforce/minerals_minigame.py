@@ -20,6 +20,7 @@ with open('config.json', 'r') as fp:
 # to use:
 # python -m pysc2.bin.agent --map CollectMineralShards --agent minerals_minigame.TestAgent
 
+
 class TestAgent(base_agent.BaseAgent):
 
     def __init__(self):
@@ -34,16 +35,16 @@ class TestAgent(base_agent.BaseAgent):
         # just using some features that should give minimum info needed for collect minerals minigame
         player_relative = utils.one_hot_encode_int_array(obs.observation['feature_screen'].player_relative, 5)
         # everything is 3 dimensional before concat
-        selected = np.expand_dims(obs.observation['feature_screen'].selected, axis=0)
-        state['screen'] = np.concatenate((player_relative, selected), axis=0)
-        obs.observation['available_actions']
+        selected = np.expand_dims(obs.observation['feature_screen'].selected, axis=2)
+        state['screen'] = np.concatenate((player_relative, selected), axis=2)
+
         avail_actions = []
         for i in range(len(FUNCTIONS)):
             if i in obs.observation['available_actions']:
                 avail_actions.append(1)
             else:
                 avail_actions.append(0)
-        state['available_actions'] = np.array(avail_actions)
+        # state['available_actions'] = np.array(avail_actions)
 
         return state
 
@@ -72,8 +73,8 @@ class TestAgent(base_agent.BaseAgent):
 
     def getStateSpec(self, obs_spec):
         states = dict(
-            screen=dict(type='float', shape=(6, 84, 84)),
-            available_actions=dict(type='float', shape=(len(FUNCTIONS)))
+            screen=dict(type='float', shape=(84, 84, 6)),
+            # available_actions=dict(type='float', shape=(len(FUNCTIONS)))
         )
         return states
 
