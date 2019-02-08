@@ -10,6 +10,11 @@ from pysc2.agents import base_agent
 from pysc2.lib import actions
 from pysc2.env.environment import StepType
 
+'''
+to use:
+python -m pysc2.bin.agent --map CollectMineralShards --agent minerals_minigame.TestAgent
+'''
+
 FUNCTIONS = actions.FUNCTIONS
 
 # masking the actions functions so only these actions can be taken
@@ -25,9 +30,6 @@ if not os.path.exists(config['model_dir']):
     shutil.copy2('config.json', config['model_dir'])
     shutil.copy2(config['network_spec_file'], config['model_dir'])
     shutil.copy2(config['agent_spec_file'], config['model_dir'])
-
-# to use:
-# python -m pysc2.bin.agent --map CollectMineralShards --agent minerals_minigame.TestAgent
 
 
 class TestAgent(base_agent.BaseAgent):
@@ -47,10 +49,10 @@ class TestAgent(base_agent.BaseAgent):
         selected = np.expand_dims(obs.observation['feature_screen'].selected, axis=2)
         state['screen'] = np.concatenate((player_relative, selected), axis=2)
 
-        avail_actions = np.zeros(len(FUNCTIONS))
-        avail_actions[obs.observation['available_actions']] = 1
-        state['available_actions'] = avail_actions
-        print(avail_actions)
+        # avail_actions = np.zeros(len(FUNCTIONS))
+        # avail_actions[obs.observation['available_actions']] = 1
+        # state['available_actions'] = avail_actions
+
         return state
 
     def format_all_actions_spec(self, action_spec):
