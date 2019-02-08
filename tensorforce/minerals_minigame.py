@@ -1,4 +1,3 @@
-import sys
 import numpy as np
 import utils
 import json
@@ -38,14 +37,10 @@ class TestAgent(base_agent.BaseAgent):
         selected = np.expand_dims(obs.observation['feature_screen'].selected, axis=2)
         state['screen'] = np.concatenate((player_relative, selected), axis=2)
 
-        avail_actions = []
-        for i in range(len(FUNCTIONS)):
-            if i in obs.observation['available_actions']:
-                avail_actions.append(1)
-            else:
-                avail_actions.append(0)
-        # state['available_actions'] = np.array(avail_actions)
-
+        avail_actions = np.zeros(len(FUNCTIONS))
+        avail_actions[obs.observation['available_actions']] = 1
+        state['available_actions'] = avail_actions
+        print(avail_actions)
         return state
 
     def format_all_actions_spec(self, action_spec):
