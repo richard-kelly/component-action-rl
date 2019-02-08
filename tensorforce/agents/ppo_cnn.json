@@ -3,13 +3,13 @@
 
     "update_mode": {
         "unit": "episodes",
-        "batch_size": 40,
-        "frequency": 40
+        "batch_size": 2,
+        "frequency": 2
     },
     "memory": {
         "type": "latest",
         "include_next_states": false,
-        "capacity": 10000
+        "capacity": 2000
     },
 
     "step_optimizer": {
@@ -28,5 +28,12 @@
         "type": "single",
         "session_config": null,
         "distributed_spec": null
+    },
+
+    "actions_exploration": {
+        "type": "epsilon_anneal",
+        "initial_epsilon": 0.9,
+        "final_epsilon": 0.1,
+        "timesteps": 3000000
     }
 }
