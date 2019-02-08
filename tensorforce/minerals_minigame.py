@@ -43,11 +43,10 @@ class TestAgent(base_agent.BaseAgent):
     def preprocess_state(self, obs):
         state = dict()
 
-        # just using some features that should give minimum info needed for collect minerals minigame
-        player_relative = utils.one_hot_encode_int_array(obs.observation['feature_screen'].player_relative, 5)
-        # everything is 3 dimensional before concat
-        selected = np.expand_dims(obs.observation['feature_screen'].selected, axis=2)
-        state['screen'] = np.concatenate((player_relative, selected), axis=2)
+        state['screen'] = utils.one_hot_encode_int_arrays(
+            (obs.observation['feature_screen'].player_relative, 4),
+            (obs.observation['feature_screen'].selected, 1)
+        )
 
         # avail_actions = np.zeros(len(FUNCTIONS))
         # avail_actions[obs.observation['available_actions']] = 1
@@ -80,7 +79,7 @@ class TestAgent(base_agent.BaseAgent):
 
     def getStateSpec(self, obs_spec):
         states = dict(
-            screen=dict(type='float', shape=(84, 84, 6)),
+            screen=dict(type='float', shape=(84, 84, 5)),
             # available_actions=dict(type='float', shape=(len(FUNCTIONS)))
         )
         return states
