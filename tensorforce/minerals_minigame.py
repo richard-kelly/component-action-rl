@@ -1,4 +1,5 @@
-import sys
+import os
+import shutil
 import numpy as np
 import utils
 import json
@@ -14,8 +15,16 @@ FUNCTIONS = actions.FUNCTIONS
 # masking the actions functions so only these actions can be taken
 relevant_actions = [0, 2, 3, 331]
 
+# load configuration
 with open('config.json', 'r') as fp:
     config = json.load(fp=fp)
+
+# save a copy of the configuration files being used for a run in the run's folder (first time only)
+if not os.path.exists(config['model_dir']):
+    os.makedirs(config['model_dir'])
+    shutil.copy2('config.json', config['model_dir'])
+    shutil.copy2(config['network_spec_file'], config['model_dir'])
+    shutil.copy2(config['agent_spec_file'], config['model_dir'])
 
 # to use:
 # python -m pysc2.bin.agent --map CollectMineralShards --agent minerals_minigame.TestAgent
