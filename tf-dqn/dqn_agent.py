@@ -29,7 +29,7 @@ class DQNAgent:
             self._decay = (config['initial_epsilon'] - config['final_epsilon']) / config['decay_steps']
 
         self._memory = Memory(config['memory_size'])
-        self._network = Network(config['batch_size'])
+        self._network = Network(config['learning_rate'])
         self._sess = tf.Session()
         self._sess.run(self._network.var_init)
 
@@ -93,33 +93,43 @@ class DQNAgent:
         # next_state=None if state is terminal
         batch = self._memory.sample(config['batch_size'])
 
+        states = {}
+        next_states = {}
         # turn states into dict with arrays of size (batch_size, ....) for each part of state
-        states = np.array([val[0] for val in batch])
+        for key in batch[0][0].keys():
+            shape = tuple([len(batch)] + list(batch[0][0][key].shape))
+            states[key] = np.zeros(shape, dtype=float)
+            next_states[key] = np.zeros(shape, dtype=float)
 
+            for i, sample in enumerate(batch):
+                states[key][i, ...] = sample[0][key]
+                if batch[i][3] is not None:
+                    next_states[key][i, ...] = sample[3][key]
 
-        next_states = np.array([(np.zeros(self._network._num_states)
-                                 if val[3] is None else val[3]) for val in batch])
         # predict Q(s,a) given the batch of states
         q_s_a = self._network.predict_batch(states, self._sess)
+
+        # TODO: this should be a different target network updated periodically
         # predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
-        q_s_a_d = self._network.predict_batch(next_states, self._sess)
+        q_s_a_target = self._network.predict_batch(next_states, self._sess)
+
         # setup training arrays
-        x = np.zeros((len(batch), self._network._num_states))
-        y = np.zeros((len(batch), self._network._num_actions))
-        for i, b in enumerate(batch):
-            state, action, reward, next_state = b[0], b[1], b[2], b[3]
-            # get the current q values for all actions in state
-            current_q = q_s_a[i]
+        # y = {}
+        # for key in q_s_a.keys():
+        #     y[key] = np.zeros(q_s_a[key].shape)
+
+        for i, sample in enumerate(batch):
+            state, action, reward, next_state = sample
             # update the q value for action
             if next_state is None:
-                # in this case, the game completed after action, so there is no max Q(s',a')
-                # prediction possible
-                current_q[action] = reward
+                # terminal state
+                for key in action.keys():
+                    q_s_a[key][i][action[key]] = reward
             else:
-                current_q[action] = reward + GAMMA * np.amax(q_s_a_d[i])
-            x[i] = state
-            y[i] = current_q
-        self._network.train_batch(self._sess, x, y)
+                for key in action.keys():
+                    q_s_a[key][i][action[key]] = reward + config['discount'] * np.amax(q_s_a_target[key][i])
+
+        self._network.train_batch(self._sess, states, q_s_a)
 
     def __del__(self):
         self._sess.close()

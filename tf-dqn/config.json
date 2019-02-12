@@ -2,6 +2,7 @@
     "model_dir": "models/1",
 
     "discount": 0.99,
+    "learning_rate": 0.001,
     "batch_size": 64,
     "update_frequency": 4,
     "memory_size": 10000,

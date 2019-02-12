@@ -2,8 +2,9 @@ import tensorflow as tf
 
 
 class Network:
-    def __init__(self, batch_size):
-        self._batch_size = batch_size
+    def __init__(self, learning_rate):
+
+        self._learning_rate = learning_rate
 
         # define the placeholders
         self._states = None
@@ -64,7 +65,7 @@ class Network:
 
         loss = tf.add_n(losses)
 
-        self._optimizer = tf.train.AdamOptimizer().minimize(loss)
+        self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(loss)
 
         self.var_init = tf.global_variables_initializer()
 
@@ -78,7 +79,7 @@ class Network:
         sess.run(
             self._optimizer,
             feed_dict={
-                self.screen_input: x_batch,
+                self.screen_input: x_batch['screen'],
                 self._q_s_a['screen_x']: y_batch['screen_x'],
                 self._q_s_a['screen_y']: y_batch['screen_y'],
                 self._q_s_a['screen2_x']: y_batch['screen2_x'],
