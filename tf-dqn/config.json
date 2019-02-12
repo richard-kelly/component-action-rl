@@ -1,5 +1,6 @@
 {
     "model_dir": "models/1",
+    "model_checkpoint_frequency": 2000,
 
     "discount": 0.99,
     "learning_rate": 0.001,

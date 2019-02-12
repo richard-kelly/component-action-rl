@@ -12,7 +12,7 @@ with open('config.json', 'r') as fp:
 
 
 class DQNAgent:
-    def __init__(self):
+    def __init__(self, restore):
         self._steps = 0
         self._episodes = 0
         self._last_state = None
@@ -29,7 +29,12 @@ class DQNAgent:
         self._memory = Memory(config['memory_size'])
         self._network = Network(config['learning_rate'])
         self._sess = tf.Session()
-        self._sess.run(self._network.var_init)
+
+        if restore:
+            self._network.saver.restore(self._sess, config['model_dir'] + '/model.ckpt')
+            print("Model restored.")
+        else:
+            self._sess.run(self._network.var_init)
 
     def observe(self, terminal=False, reward=0):
         self._last_reward = reward
@@ -46,10 +51,16 @@ class DQNAgent:
 
         action = self._choose_action(state)
 
-        # do a batch of learning every "update_frequency" steps
         self._steps += 1
+
+        # do a batch of learning every "update_frequency" steps
         if self._steps % config['update_frequency'] == 0:
             self._replay()
+
+        # save checkpoint if needed
+        if self._steps % config['model_checkpoint_frequency'] == 0:
+            save_path = self._network.saver.save(self._sess, config['model_dir'] + '/model.ckpt')
+            print("Model saved in path: %s" % save_path)
 
         self._update_epsilon()
 

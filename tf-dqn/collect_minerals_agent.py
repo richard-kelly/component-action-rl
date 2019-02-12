@@ -25,7 +25,9 @@ with open('config.json', 'r') as fp:
     config = json.load(fp=fp)
 
 # save a copy of the configuration files being used for a run in the run's folder (first time only)
+restore = True
 if not os.path.exists(config['model_dir']):
+    restore = False
     os.makedirs(config['model_dir'])
     shutil.copy2('config.json', config['model_dir'])
 
@@ -37,7 +39,7 @@ class MineralsAgent(base_agent.BaseAgent):
         self.validLastAction = False
         self.rewardCount = 0
         self.episodeCount = 0
-        self.rl_agent = DQNAgent()
+        self.rl_agent = DQNAgent(restore)
 
     def preprocess_state(self, obs):
         state = dict()

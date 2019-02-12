@@ -71,6 +71,8 @@ class Network:
 
         self.var_init = tf.global_variables_initializer()
 
+        self.saver = tf.train.Saver()
+
     def predict_one(self, state, sess):
         return sess.run(self._logits, feed_dict={self.screen_input: state['screen'].reshape(1, 84, 84, 5)})
 
