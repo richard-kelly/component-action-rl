@@ -1,10 +1,8 @@
 import tensorflow as tf
 import numpy as np
-import gym
 import math
 import random
 import json
-import matplotlib.pyplot as plt
 
 from network import Network
 from memory import Memory
@@ -69,16 +67,18 @@ class DQNAgent:
     def _choose_action(self, state):
         if random.random() < self._epsilon:
             return dict(
+                # function is an integer, but everything else is a 1D array of ints
                 function=random.randint(0, 3),
-                screen=np.array(random.randint(0, 83), random.randint(0, 83)),
-                screen2=np.array(random.randint(0, 83), random.randint(0, 83)),
-                select_point_act=np.array(random.randint(0, 3)),
-                select_add=np.array(random.randint(0, 1)),
-                queued=np.array(random.randint(0, 1)),
+                screen=np.array([random.randint(0, 83), random.randint(0, 83)]),
+                screen2=np.array([random.randint(0, 83), random.randint(0, 83)]),
+                select_point_act=np.array([random.randint(0, 3)]),
+                select_add=np.array([random.randint(0, 1)]),
+                queued=np.array([random.randint(0, 1)]),
             )
         else:
             # returns dict
             pred = self._network.predict_one(state, self._sess)
+            print(pred)
             return dict(
                 function=np.argmax(pred['function']),
                 screen=np.array(np.argmax(pred['screen_x']), np.argmax(pred['screen_y'])),

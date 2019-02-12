@@ -20,13 +20,13 @@ class Network:
 
     def _define_model(self):
 
-        self.screen_input = tf.placeholder(shape=[None, 84, 84, 6], dtype=tf.float32)
+        self.screen_input = tf.placeholder(shape=[None, 84, 84, 5], dtype=tf.float32)
         self._q_s_a = dict(
+            function=tf.placeholder(shape=[None, 4], dtype=tf.float32),
             screen_x=tf.placeholder(shape=[None, 84], dtype=tf.float32),
             screen_y=tf.placeholder(shape=[None, 84], dtype=tf.float32),
             screen2_x=tf.placeholder(shape=[None, 84], dtype=tf.float32),
             screen2_y=tf.placeholder(shape=[None, 84], dtype=tf.float32),
-            func_id=tf.placeholder(shape=[None, 4], dtype=tf.float32),
             select_point_act=tf.placeholder(shape=[None, 4], dtype=tf.float32),
             select_add=tf.placeholder(shape=[None, 2], dtype=tf.float32),
             queued=tf.placeholder(shape=[None, 2], dtype=tf.float32)
@@ -46,22 +46,25 @@ class Network:
             padding='same'
         )
 
-        fc = tf.layers.dense(conv2, 1024, activation=tf.nn.relu)
-
+        # MUST flatten conv or pooling layers before sending to dense layer
+        conv2_flat = tf.reshape(conv2, [-1, 84 * 84 * 16])
+        fc = tf.layers.dense(conv2_flat, 1024, activation=tf.nn.relu)
+        print(self._q_s_a['screen_x'].shape)
         self._logits = dict(
+            function=tf.layers.dense(fc, 4),
             screen_x=tf.layers.dense(fc, 84),
             screen_y=tf.layers.dense(fc, 84),
             screen2_x=tf.layers.dense(fc, 84),
             screen2_y=tf.layers.dense(fc, 84),
-            func_id=tf.layers.dense(fc, 4),
             select_point_act=tf.layers.dense(fc, 4),
             select_add=tf.layers.dense(fc, 2),
             queued=tf.layers.dense(fc, 2)
         )
-
+        print(self._logits['screen_x'].shape)
         losses = []
-        for k, v in self._logits:
-            losses.append(tf.losses.mean_squared_error(self._q_s_a[k], self._logits[k]))
+        for key in self._logits.keys():
+            print(key)
+            losses.append(tf.losses.mean_squared_error(self._q_s_a[key], self._logits[key]))
 
         loss = tf.add_n(losses)
 
@@ -80,11 +83,11 @@ class Network:
             self._optimizer,
             feed_dict={
                 self.screen_input: x_batch['screen'],
+                self._q_s_a['function']: y_batch['function'],
                 self._q_s_a['screen_x']: y_batch['screen_x'],
                 self._q_s_a['screen_y']: y_batch['screen_y'],
                 self._q_s_a['screen2_x']: y_batch['screen2_x'],
                 self._q_s_a['screen2_y']: y_batch['screen2_y'],
-                self._q_s_a['func_id']: y_batch['func_id'],
                 self._q_s_a['select_point_act']: y_batch['select_point_act'],
                 self._q_s_a['select_add']: y_batch['select_add'],
                 self._q_s_a['queued']: y_batch['queued']
