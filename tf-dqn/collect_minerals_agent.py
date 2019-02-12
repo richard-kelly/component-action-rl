@@ -1,23 +1,33 @@
 import numpy as np
-import utils
 import json
+import os
+import shutil
 
 from pysc2.agents import base_agent
 from pysc2.lib import actions
 from pysc2.env.environment import StepType
 
 from dqn_agent import DQNAgent
+import utils
+
+'''
+to use:
+python -m pysc2.bin.agent --map CollectMineralShards --agent collect_minerals_agent.MineralsAgent
+'''
 
 FUNCTIONS = actions.FUNCTIONS
 
 # masking the actions functions so only these actions can be taken
 relevant_actions = [0, 2, 3, 331]
 
+# load configuration
 with open('config.json', 'r') as fp:
     config = json.load(fp=fp)
 
-# to use:
-# python -m pysc2.bin.agent --map CollectMineralShards --agent collect_minerals_agent.MineralsAgent
+# save a copy of the configuration files being used for a run in the run's folder (first time only)
+if not os.path.exists(config['model_dir']):
+    os.makedirs(config['model_dir'])
+    shutil.copy2('config.json', config['model_dir'])
 
 
 class MineralsAgent(base_agent.BaseAgent):
