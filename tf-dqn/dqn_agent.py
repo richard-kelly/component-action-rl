@@ -78,14 +78,13 @@ class DQNAgent:
         else:
             # returns dict
             pred = self._network.predict_one(state, self._sess)
-            print(pred)
             return dict(
                 function=np.argmax(pred['function']),
-                screen=np.array(np.argmax(pred['screen_x']), np.argmax(pred['screen_y'])),
-                screen2=np.array(np.argmax(pred['screen2_x']), np.argmax(pred['screen2_y'])),
-                select_point_act=np.array(np.argmax(pred['select_point_act'])),
-                select_add=np.array(np.argmax(pred['select_add'])),
-                queued=np.array(np.argmax(pred['queued']))
+                screen=np.array([np.argmax(pred['screen_x']), np.argmax(pred['screen_y'])]),
+                screen2=np.array([np.argmax(pred['screen2_x']), np.argmax(pred['screen2_y'])]),
+                select_point_act=np.array([np.argmax(pred['select_point_act'])]),
+                select_add=np.array([np.argmax(pred['select_add'])]),
+                queued=np.array([np.argmax(pred['queued'])])
             )
 
     def _replay(self):

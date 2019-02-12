@@ -49,7 +49,7 @@ class Network:
         # MUST flatten conv or pooling layers before sending to dense layer
         conv2_flat = tf.reshape(conv2, [-1, 84 * 84 * 16])
         fc = tf.layers.dense(conv2_flat, 1024, activation=tf.nn.relu)
-        print(self._q_s_a['screen_x'].shape)
+
         self._logits = dict(
             function=tf.layers.dense(fc, 4),
             screen_x=tf.layers.dense(fc, 84),
@@ -60,10 +60,9 @@ class Network:
             select_add=tf.layers.dense(fc, 2),
             queued=tf.layers.dense(fc, 2)
         )
-        print(self._logits['screen_x'].shape)
+
         losses = []
         for key in self._logits.keys():
-            print(key)
             losses.append(tf.losses.mean_squared_error(self._q_s_a[key], self._logits[key]))
 
         loss = tf.add_n(losses)
