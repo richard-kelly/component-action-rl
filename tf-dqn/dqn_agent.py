@@ -45,13 +45,13 @@ class DQNAgent:
         # at end of episode store memory sample with None for next state
         # set last_state to None so that on next act() we know it is beginning of episode
         if terminal:
-            self._memory.add_sample((self._last_state, self._last_action, reward, None))
+            self._memory.add_sample(self._last_state, self._last_action, reward, None, True)
             self._last_state = None
             self._episodes += 1
 
     def act(self, state):
         if self._last_state is not None:
-            self._memory.add_sample((self._last_state, self._last_action, self._last_reward, state))
+            self._memory.add_sample(self._last_state, self._last_action, self._last_reward, state, False)
 
         action = self._choose_action(state)
 
@@ -65,7 +65,7 @@ class DQNAgent:
         if self._steps % config['model_checkpoint_frequency'] == 0:
             save_path = self._network.saver.save(
                 sess=self._sess,
-                save_path=['model_dir'] + '/model.ckpt',
+                save_path=config['model_dir'] + '/model.ckpt',
                 global_step=self._steps
             )
             print("Model saved in path: %s" % save_path)
@@ -135,7 +135,7 @@ class DQNAgent:
                 # for key in action.keys():
                 #     q_s_a[key][i][action[key]] = reward
             else:
-                q_s_a['function'][i, actions['function'][i]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['function'][i])
+                q_s_a['function'][i, actions['function'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['function'][i])
                 q_s_a['screen_x'][i, actions['screen'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen_x'][i])
                 q_s_a['screen_y'][i, actions['screen'][i, 1]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen_y'][i])
                 q_s_a['screen2_x'][i, actions['screen2'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen2_x'][i])
