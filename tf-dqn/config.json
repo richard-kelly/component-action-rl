@@ -1,15 +1,17 @@
 {
     "model_dir": "models/1",
     "model_checkpoint_frequency": 2000,
+    "model_checkpoint_max": 5,
+    "model_checkpoint_every_n_hours": 4,
 
     "discount": 0.99,
     "learning_rate": 0.001,
     "batch_size": 64,
     "update_frequency": 4,
-    "memory_size": 10000,
+    "memory_size": 20000,
     "target_update_frequency": 1000,
 
-    "initial_epsilon": 0.9,
+    "initial_epsilon": 1.0,
     "final_epsilon": 0.1,
     "decay_steps": 10000000,
     "decay_type": "exponential"

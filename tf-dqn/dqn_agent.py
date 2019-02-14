@@ -27,7 +27,11 @@ class DQNAgent:
             self._decay = (config['initial_epsilon'] - config['final_epsilon']) / config['decay_steps']
 
         self._memory = Memory(config['memory_size'])
-        self._network = Network(config['learning_rate'])
+        self._network = Network(
+            config['learning_rate'],
+            config['model_checkpoint_max'],
+            config['model_checkpoint_every_n_hours']
+        )
         self._sess = tf.Session()
 
         if restore:
@@ -59,7 +63,11 @@ class DQNAgent:
 
         # save checkpoint if needed
         if self._steps % config['model_checkpoint_frequency'] == 0:
-            save_path = self._network.saver.save(self._sess, config['model_dir'] + '/model.ckpt')
+            save_path = self._network.saver.save(
+                sess=self._sess,
+                save_path=['model_dir'] + '/model.ckpt',
+                global_step=self._steps
+            )
             print("Model saved in path: %s" % save_path)
 
         self._update_epsilon()

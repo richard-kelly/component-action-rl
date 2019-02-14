@@ -2,9 +2,11 @@ import tensorflow as tf
 
 
 class Network:
-    def __init__(self, learning_rate):
+    def __init__(self, learning_rate, max_checkpoints, checkpoint_hours):
 
         self._learning_rate = learning_rate
+        self._max_checkpoints = max_checkpoints
+        self._checkpoint_hours = checkpoint_hours
 
         # define the placeholders
         self._states = None
@@ -14,6 +16,7 @@ class Network:
         self._logits = None
         self._optimizer = None
         self.var_init = None
+        self.saver = None
 
         # now setup the model
         self._define_model()
@@ -71,7 +74,10 @@ class Network:
 
         self.var_init = tf.global_variables_initializer()
 
-        self.saver = tf.train.Saver()
+        self.saver = tf.train.Saver(
+            max_to_keep=self._max_checkpoints,
+            keep_checkpoint_every_n_hours=self._checkpoint_hours
+        )
 
     def predict_one(self, state, sess):
         return sess.run(self._logits, feed_dict={self.screen_input: state['screen'].reshape(1, 84, 84, 5)})
