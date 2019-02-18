@@ -118,33 +118,27 @@ class DQNAgent:
         # predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
         q_s_a_target = self._network.predict_batch(next_states, self._sess)
 
-        for i in range(rewards.shape[0]):
-            # update the q value for action
-            # TODO: Store action the same way the network produces it, and convert to SC2 agent format later
-            # TODO: This would remove lots/all?? of the SC2 stuff from the DQN implementation
-            if is_terminal[i]:
-                # terminal state
-                q_s_a['function'][i, actions['function'][i]] = rewards[i]
-                q_s_a['screen_x'][i, actions['screen'][i, 0]] = rewards[i]
-                q_s_a['screen_y'][i, actions['screen'][i, 1]] = rewards[i]
-                q_s_a['screen2_x'][i, actions['screen2'][i, 0]] = rewards[i]
-                q_s_a['screen2_y'][i, actions['screen2'][i, 1]] = rewards[i]
-                q_s_a['select_point_act'][i, actions['select_point_act'][i, 0]] = rewards[i]
-                q_s_a['select_add'][i, actions['select_add'][i, 0]] = rewards[i]
-                q_s_a['queued'][i, actions['queued'][i, 0]] = rewards[i]
-                # for key in action.keys():
-                #     q_s_a[key][i][action[key]] = reward
-            else:
-                q_s_a['function'][i, actions['function'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['function'][i])
-                q_s_a['screen_x'][i, actions['screen'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen_x'][i])
-                q_s_a['screen_y'][i, actions['screen'][i, 1]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen_y'][i])
-                q_s_a['screen2_x'][i, actions['screen2'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen2_x'][i])
-                q_s_a['screen2_y'][i, actions['screen2'][i, 1]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen2_y'][i])
-                q_s_a['select_point_act'][i, actions['select_point_act'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['select_point_act'][i])
-                q_s_a['select_add'][i, actions['select_add'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['select_add'][i])
-                q_s_a['queued'][i, actions['queued'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['queued'][i])
-                # for key in action.keys():
-                #     q_s_a[key][i][action[key]] = reward + config['discount'] * np.amax(q_s_a_target[key][i])
+        # update the q value for action
+        # TODO: Store action the same way the network produces it, and convert to SC2 agent format later
+        # TODO: This would remove lots/all?? of the SC2 stuff from the DQN implementation
+
+        # terminal state
+        print(q_s_a['function'])
+        print(actions['function'][:])
+        print(config['discount'] * np.amax(q_s_a_target['function'], axis=1))
+        q_s_a['function'][:, actions['function'][:]] = np.where(is_terminal, rewards, rewards + config['discount'] * np.amax(q_s_a_target['function'], axis=1))
+        q_s_a['screen_x'][:, actions['screen'][:, 0]] = np.where(is_terminal, rewards, rewards + config['discount'] * np.amax(q_s_a_target['screen_x'], axis=1))
+        q_s_a['screen_y'][:, actions['screen'][:, 1]] = np.where(is_terminal, rewards, rewards + config['discount'] * np.amax(q_s_a_target['screen_y'], axis=1))
+        q_s_a['screen2_x'][:, actions['screen2'][:, 0]] = np.where(is_terminal, rewards, rewards + config['discount'] * np.amax(q_s_a_target['screen2_x'], axis=1))
+        q_s_a['screen2_y'][:, actions['screen2'][:, 1]] = np.where(is_terminal, rewards, rewards + config['discount'] * np.amax(q_s_a_target['screen2_y'], axis=1))
+        q_s_a['select_point_act'][:, actions['select_point_act'][:, 0]] = np.where(is_terminal, rewards, rewards + config['discount'] * np.amax(q_s_a_target['select_point_act'], axis=1))
+        q_s_a['select_add'][:, actions['select_add'][:, 0]] = np.where(is_terminal, rewards, rewards + config['discount'] * np.amax(q_s_a_target['select_add'], axis=1))
+        q_s_a['queued'][:, actions['queued'][:, 0]] = np.where(is_terminal, rewards, rewards + config['discount'] * np.amax(q_s_a_target['queued'], axis=1))
+        # for key in action.keys():
+        #     q_s_a[key][i][action[key]] = reward
+
+        # for key in action.keys():
+        #     q_s_a[key][i][action[key]] = reward + config['discount'] * np.amax(q_s_a_target[key][i])
 
         self._network.train_batch(self._sess, states, q_s_a)
 
