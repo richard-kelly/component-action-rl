@@ -9,6 +9,13 @@ class Memory:
         self._samples = None
         self._index = 0
         self._is_full = False
+        self._indexing_array = np.arange(self._max_steps)
+
+    def get_size(self):
+        if self._is_full:
+            return self._max_steps
+        else:
+            return self._index
 
     def add_sample(self, state, action, reward, next_state, is_terminal):
         if self._samples is None:
@@ -55,20 +62,22 @@ class Memory:
         if self._is_full:
             if num_samples > self._max_steps:
                 num_samples = self._max_steps
-            indices = np.random.choice(np.arange(self._max_steps), num_samples, replace=False)
+            indices = np.random.choice(self._indexing_array, num_samples, replace=False)
         else:
             if num_samples > self._index:
                 num_samples = self._index
-            indices = np.random.choice(np.arange(self._index), num_samples, replace=False)
+            indices = np.random.choice(self._indexing_array[:self._index], num_samples, replace=False)
 
         state = {}
         next_state = {}
-        for key in self._samples['state'].keys():
-            state[key] = self._samples['state'][key][indices, ...]
-            next_state[key] = self._samples['next_state'][key][indices, ...]
+        for k, v in self._samples['state'].items():
+            state[k] = v[indices, ...]
+            next_state[k] = self._samples['next_state'][k][indices, ...]
+
         action = {}
-        for key in self._samples['action'].keys():
-            action[key] = self._samples['action'][key][indices, ...]
+        for k, v in self._samples['action'].items():
+            action[k] = v[indices, ...]
+
         reward = self._samples['reward'][indices]
         is_terminal = self._samples['is_terminal'][indices]
 
