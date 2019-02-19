@@ -69,7 +69,7 @@ class DQNAgent:
         self._steps += 1
 
         # do a batch of learning every "update_frequency" steps
-        if self._steps % config['update_frequency'] == 0 and self._memory.get_size() >= config['batch_size']:
+        if self._steps % config['update_frequency'] == 0 and self._memory.get_size() >= config['memory_burn_in']:
             self._replay()
 
         # save checkpoint if needed

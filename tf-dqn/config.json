@@ -9,6 +9,7 @@
     "batch_size": 64,
     "update_frequency": 4,
     "memory_size": 20000,
+    "memory_burn_in": 500,
     "target_update_frequency": 1000,
 
     "initial_epsilon": 1.0,
