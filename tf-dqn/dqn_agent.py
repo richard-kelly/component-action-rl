@@ -33,6 +33,7 @@ class DQNAgent:
             config['model_checkpoint_every_n_hours']
         )
         self._sess = tf.Session()
+        self._writer = tf.summary.FileWriter(config['model_dir'], self._sess.graph)
 
         if restore:
             self._network.saver.restore(self._sess, config['model_dir'] + '/model.ckpt')
