@@ -39,36 +39,38 @@ class Network:
             inputs=self.screen_input,
             filters=16,
             kernel_size=5,
-            padding='same'
+            padding='same',
+            name='conv1'
         )
 
         conv2 = tf.layers.conv2d(
             inputs=conv1,
             filters=16,
             kernel_size=3,
-            padding='same'
+            padding='same',
+            name='conv2'
         )
 
         # MUST flatten conv or pooling layers before sending to dense layer
-        conv2_flat = tf.reshape(conv2, [-1, 84 * 84 * 16])
-        fc = tf.layers.dense(conv2_flat, 1024, activation=tf.nn.relu)
+        conv2_flat = tf.reshape(conv2, [-1, 84 * 84 * 16], name='conv2_flat')
+        fc = tf.layers.dense(conv2_flat, 1024, activation=tf.nn.relu, name='fc')
 
         self._logits = dict(
-            function=tf.layers.dense(fc, 4),
-            screen_x=tf.layers.dense(fc, 84),
-            screen_y=tf.layers.dense(fc, 84),
-            screen2_x=tf.layers.dense(fc, 84),
-            screen2_y=tf.layers.dense(fc, 84),
-            select_point_act=tf.layers.dense(fc, 4),
-            select_add=tf.layers.dense(fc, 2),
-            queued=tf.layers.dense(fc, 2)
+            function=tf.layers.dense(fc, 4, name='function'),
+            screen_x=tf.layers.dense(fc, 84, name='screen_x'),
+            screen_y=tf.layers.dense(fc, 84, name='screen_y'),
+            screen2_x=tf.layers.dense(fc, 84, name='screen2_x'),
+            screen2_y=tf.layers.dense(fc, 84, name='screen2_y'),
+            select_point_act=tf.layers.dense(fc, 4, name='select_point_act'),
+            select_add=tf.layers.dense(fc, 2, name='select_add'),
+            queued=tf.layers.dense(fc, 2, name='queued')
         )
 
         losses = []
         for key in self._logits.keys():
             losses.append(tf.losses.mean_squared_error(self._q_s_a[key], self._logits[key]))
 
-        loss = tf.add_n(losses)
+        loss = tf.add_n(losses, name='losses')
 
         self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(loss)
 
