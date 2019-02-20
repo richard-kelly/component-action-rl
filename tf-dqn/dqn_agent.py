@@ -19,6 +19,7 @@ class DQNAgent:
         self._last_state = None
         self._last_reward = None
         self._last_action = None
+        self._sample_action = None
 
         self._times = dict(
             sample=0,
@@ -64,6 +65,7 @@ class DQNAgent:
             self._episodes += 1
 
     def act(self, state):
+
         if self._last_state is not None:
             self._memory.add_sample(self._last_state, self._last_action, self._last_reward, state, False)
 
@@ -98,27 +100,18 @@ class DQNAgent:
             self._epsilon = self._epsilon - self._decay
 
     def _choose_action(self, state):
+        action = {}
         if random.random() < self._epsilon:
-            return dict(
-                # function is an integer, but everything else is a 1D array of ints
-                function=random.randint(0, 3),
-                screen=np.array([random.randint(0, 83), random.randint(0, 83)]),
-                screen2=np.array([random.randint(0, 83), random.randint(0, 83)]),
-                select_point_act=np.array([random.randint(0, 3)]),
-                select_add=np.array([random.randint(0, 1)]),
-                queued=np.array([random.randint(0, 1)]),
-            )
+            if self._sample_action is None:
+                # store one action to serve as action specification
+                self._sample_action = self._network.predict_one(state, self._sess)
+            for name, logits in self._sample_action.items():
+                action[name] = random.randint(0, logits.shape[1] - 1)
         else:
-            # returns dict
             pred = self._network.predict_one(state, self._sess)
-            return dict(
-                function=np.argmax(pred['function']),
-                screen=np.array([np.argmax(pred['screen_x']), np.argmax(pred['screen_y'])]),
-                screen2=np.array([np.argmax(pred['screen2_x']), np.argmax(pred['screen2_y'])]),
-                select_point_act=np.array([np.argmax(pred['select_point_act'])]),
-                select_add=np.array([np.argmax(pred['select_add'])]),
-                queued=np.array([np.argmax(pred['queued'])])
-            )
+            for name, q_values in pred.items():
+                action[name] = np.argmax(q_values)
+        return action
 
     def _replay(self):
 
@@ -144,33 +137,15 @@ class DQNAgent:
         self._times['predict_batch_next_states'] += time.time() - last_time
         last_time = time.time()
 
+        # TODO: his isn't too slow, but replace with vectorized version
         for i in range(rewards.shape[0]):
             # update the q value for action
-            # TODO: Store action the same way the network produces it, and convert to SC2 agent format later
-            # TODO: This would remove lots/all?? of the SC2 stuff from the DQN implementation
             if is_terminal[i]:
-                # terminal state
-                q_s_a['function'][i, actions['function'][i]] = rewards[i]
-                q_s_a['screen_x'][i, actions['screen'][i, 0]] = rewards[i]
-                q_s_a['screen_y'][i, actions['screen'][i, 1]] = rewards[i]
-                q_s_a['screen2_x'][i, actions['screen2'][i, 0]] = rewards[i]
-                q_s_a['screen2_y'][i, actions['screen2'][i, 1]] = rewards[i]
-                q_s_a['select_point_act'][i, actions['select_point_act'][i, 0]] = rewards[i]
-                q_s_a['select_add'][i, actions['select_add'][i, 0]] = rewards[i]
-                q_s_a['queued'][i, actions['queued'][i, 0]] = rewards[i]
-                # for key in action.keys():
-                #     q_s_a[key][i][action[key]] = reward
+                for name, q_values in q_s_a.items():
+                    q_values[i, actions[name][i]] = rewards[i]
             else:
-                q_s_a['function'][i, actions['function'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['function'][i])
-                q_s_a['screen_x'][i, actions['screen'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen_x'][i])
-                q_s_a['screen_y'][i, actions['screen'][i, 1]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen_y'][i])
-                q_s_a['screen2_x'][i, actions['screen2'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen2_x'][i])
-                q_s_a['screen2_y'][i, actions['screen2'][i, 1]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['screen2_y'][i])
-                q_s_a['select_point_act'][i, actions['select_point_act'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['select_point_act'][i])
-                q_s_a['select_add'][i, actions['select_add'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['select_add'][i])
-                q_s_a['queued'][i, actions['queued'][i, 0]] = rewards[i] + config['discount'] * np.amax(q_s_a_target['queued'][i])
-                # for key in action.keys():
-                #     q_s_a[key][i][action[key]] = reward + config['discount'] * np.amax(q_s_a_target[key][i])
+                for name, q_values in q_s_a.items():
+                    q_values[i, actions[name][i]] = rewards[i] + config['discount'] * np.amax(q_s_a_target[name][i])
 
         self._times['calculating_y'] += time.time() - last_time
         last_time = time.time()

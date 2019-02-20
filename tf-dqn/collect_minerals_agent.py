@@ -102,7 +102,12 @@ class MineralsAgent(base_agent.BaseAgent):
 
         args = []
         for i in range(len(FUNCTIONS[id].args)):
-            args.append(action[FUNCTIONS[id].args[i].name].tolist())
+            if FUNCTIONS[id].args[i].name == 'screen':
+                args.append([action['screen_x'], action['screen_y']])
+            elif FUNCTIONS[id].args[i].name == 'screen2':
+                args.append([action['screen2_x'], action['screen2_y']])
+            else:
+                args.append([action[FUNCTIONS[id].args[i].name]])
         # print(m + 'Valid action: ' + FUNCTIONS[id].name)
         return actions.FunctionCall(id, args), True
 
