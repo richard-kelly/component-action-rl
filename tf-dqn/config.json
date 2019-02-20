@@ -17,6 +17,6 @@
     "decay_steps": 10000000,
     "decay_type": "exponential",
 
-    "debug_loging": true,
+    "debug_logging": false,
     "log_frequency": 200
 }

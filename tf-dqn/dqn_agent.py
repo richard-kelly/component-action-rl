@@ -176,7 +176,7 @@ class DQNAgent:
 
         self._times['train_batch'] += time.time() - last_time
         self._time_count += 1
-        if self._time_count == config['log_frequency']:
+        if config['debug_logging'] and self._time_count == config['log_frequency']:
             print("average ms for", config['log_frequency'], "replays:")
             for k, v in self._times.items():
                 print("%25s:%.2f" % (k, v / (config['log_frequency'] / 1000)))
