@@ -1,3 +1,5 @@
 .idea/
 tensorforce/__pycache__/
 tensorforce/models/
+tf-dqn/__pycache__/
+tf-dqn/models/

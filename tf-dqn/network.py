@@ -35,39 +35,90 @@ class Network:
             queued=tf.placeholder(shape=[None, 2], dtype=tf.float32)
         )
 
-        conv1 = tf.layers.conv2d(
+        # conv1_non_spatial = tf.layers.conv2d(
+        #     inputs=self.screen_input,
+        #     filters=16,
+        #     kernel_size=8,
+        #     strides=4,
+        #     padding='valid',
+        #     name='conv1_non_spatial'
+        # )
+        #
+        # max_1 = tf.layers.max_pooling2d(
+        #     inputs=conv1_non_spatial,
+        #     pool_size=3,
+        #     strides=1,
+        #     name='max_1'
+        # )
+        #
+        # conv2_non_spatial = tf.layers.conv2d(
+        #     inputs=max_1,
+        #     filters=32,
+        #     kernel_size=4,
+        #     stride=2,
+        #     padding='valid',
+        #     name='conv2_spatial'
+        # )
+        #
+        # max_2 = tf.layers.max_pooling2d(
+        #     inputs=conv2_non_spatial,
+        #     pool_size=3,
+        #     strides=1,
+        #     name='max_2'
+        # )
+
+        conv1_spatial = tf.layers.conv2d(
             inputs=self.screen_input,
             filters=16,
             kernel_size=5,
             padding='same',
-            name='conv1'
+            name='conv1_spatial'
         )
 
-        conv2 = tf.layers.conv2d(
-            inputs=conv1,
-            filters=16,
+        conv2_spatial = tf.layers.conv2d(
+            inputs=conv1_spatial,
+            filters=32,
             kernel_size=3,
             padding='same',
-            name='conv2'
+            name='conv2_spatial'
         )
 
         # MUST flatten conv or pooling layers before sending to dense layer
-        conv2_flat = tf.reshape(conv2, [-1, 84 * 84 * 16], name='conv2_flat')
-        fc = tf.layers.dense(conv2_flat, 1024, activation=tf.nn.relu, name='fc')
+        conv2_spatial_flat = tf.reshape(conv2_spatial, [-1, 84 * 84 * 32], name='conv2_spatial_flat')
+        fc_spatial = tf.layers.dense(conv2_spatial_flat, 1024, activation=tf.nn.relu, name='fc_spatial')
+
+        spatial_policy_1 = tf.layers.conv2d(
+            inputs=conv2_spatial,
+            filters=1,
+            kernel_size=1,
+            padding='same',
+            name='spatial_policy_1'
+        )
+
+        spatial_policy_2 = tf.layers.conv2d(
+            inputs=conv2_spatial,
+            filters=1,
+            kernel_size=1,
+            padding='same',
+            name='spatial_policy_2'
+        )
 
         self._logits = dict(
-            function=tf.layers.dense(fc, 4, name='function'),
-            screen_x=tf.layers.dense(fc, 84, name='screen_x'),
-            screen_y=tf.layers.dense(fc, 84, name='screen_y'),
-            screen2_x=tf.layers.dense(fc, 84, name='screen2_x'),
-            screen2_y=tf.layers.dense(fc, 84, name='screen2_y'),
-            select_point_act=tf.layers.dense(fc, 4, name='select_point_act'),
-            select_add=tf.layers.dense(fc, 2, name='select_add'),
-            queued=tf.layers.dense(fc, 2, name='queued')
+            function=tf.layers.dense(fc_spatial, 4, name='function'),
+            screen_x=tf.reshape(tf.reduce_max(spatial_policy_1, axis=2), [-1, 84], name='screen_x'),
+            screen_y=tf.reshape(tf.reduce_max(spatial_policy_1, axis=1), [-1, 84], name='screen_y'),
+            screen2_x=tf.reshape(tf.reduce_max(spatial_policy_2, axis=2), [-1, 84], name='screen2_x'),
+            screen2_y=tf.reshape(tf.reduce_max(spatial_policy_2, axis=1), [-1, 84], name='screen2_y'),
+            select_point_act=tf.layers.dense(fc_spatial, 4, name='select_point_act'),
+            select_add=tf.layers.dense(fc_spatial, 2, name='select_add'),
+            queued=tf.layers.dense(fc_spatial, 2, name='queued')
         )
 
         losses = []
         for key in self._logits.keys():
+            # print(key)
+            # print(self._q_s_a[key].shape)
+            # print(self._logits[key].shape)
             losses.append(tf.losses.mean_squared_error(self._q_s_a[key], self._logits[key]))
 
         loss = tf.add_n(losses, name='losses')
