@@ -46,8 +46,11 @@ class DQNAgent:
         self._writer = tf.summary.FileWriter(config['model_dir'], self._sess.graph)
 
         if restore:
-            self._network.saver.restore(self._sess, config['model_dir'] + '/model.ckpt')
-            print("Model restored.")
+            try:
+                self._network.saver.restore(self._sess, config['model_dir'] + '/model.ckpt')
+                print("Model restored.")
+            except ValueError:
+                self._sess.run(self._network.var_init)
         else:
             self._sess.run(self._network.var_init)
 
