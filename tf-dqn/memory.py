@@ -25,7 +25,7 @@ class Memory:
                 action={},
                 next_state={},
                 reward=np.zeros(self._max_steps, dtype=np.float),
-                is_terminal=np.full(self._max_steps, False)
+                is_terminal=np.zeros(self._max_steps)
             )
 
             for key in state.keys():
@@ -34,7 +34,7 @@ class Memory:
                 self._samples['next_state'][key] = np.zeros(shape, dtype=np.float)
 
             for key in action.keys():
-                shape = tuple([self._max_steps] + list(action[key].shape))
+                shape = tuple([self._max_steps] + [1])
                 self._samples['action'][key] = np.zeros(shape, dtype=np.int)
 
         # replace memory in index position
