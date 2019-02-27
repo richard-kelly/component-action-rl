@@ -2,11 +2,12 @@ import tensorflow as tf
 
 
 class Network:
-    def __init__(self, learning_rate, max_checkpoints, checkpoint_hours):
+    def __init__(self, learning_rate, max_checkpoints, checkpoint_hours, screen_size):
 
         self._learning_rate = learning_rate
         self._max_checkpoints = max_checkpoints
         self._checkpoint_hours = checkpoint_hours
+        self.screen_size = screen_size
 
         # define the placeholders
         self._states = None
@@ -23,11 +24,11 @@ class Network:
 
     def _define_model(self):
 
-        self.screen_input = tf.placeholder(shape=[None, 84, 84, 5], dtype=tf.float32)
+        self.screen_input = tf.placeholder(shape=[None, self.screen_size, self.screen_size, 5], dtype=tf.float32)
         self._q_s_a = dict(
             function=tf.placeholder(shape=[None, 4], dtype=tf.float32),
-            screen=tf.placeholder(shape=[None, 84 * 84], dtype=tf.float32),
-            screen2=tf.placeholder(shape=[None, 84 * 84], dtype=tf.float32),
+            screen=tf.placeholder(shape=[None, self.screen_size * self.screen_size], dtype=tf.float32),
+            screen2=tf.placeholder(shape=[None, self.screen_size * self.screen_size], dtype=tf.float32),
             select_point_act=tf.placeholder(shape=[None, 4], dtype=tf.float32),
             select_add=tf.placeholder(shape=[None, 2], dtype=tf.float32),
             queued=tf.placeholder(shape=[None, 2], dtype=tf.float32)
@@ -89,7 +90,11 @@ class Network:
         )
 
         # MUST flatten conv or pooling layers before sending to dense layer
-        non_spatial_flat = tf.reshape(max_pool, [-1, 28 * 28 * 32], name='conv2_spatial_flat')
+        non_spatial_flat = tf.reshape(
+            max_pool,
+            shape=[-1, self.screen_size * self.screen_size / 9 * 32],
+            name='conv2_spatial_flat'
+        )
         fc_non_spatial = tf.layers.dense(non_spatial_flat, 512, activation=tf.nn.relu, name='fc_spatial')
 
         spatial_policy_1 = tf.layers.conv2d(
@@ -110,8 +115,8 @@ class Network:
 
         self._logits = dict(
             function=tf.layers.dense(fc_non_spatial, 4, name='function'),
-            screen=tf.reshape(spatial_policy_1, [-1, 84 * 84], name='screen_policy'),
-            screen2=tf.reshape(spatial_policy_2, [-1, 84 * 84], name='screen2_policy'),
+            screen=tf.reshape(spatial_policy_1, [-1, self.screen_size * self.screen_size], name='screen_policy'),
+            screen2=tf.reshape(spatial_policy_2, [-1, self.screen_size * self.screen_size], name='screen2_policy'),
             select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act'),
             select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add'),
             queued=tf.layers.dense(fc_non_spatial, 2, name='queued')
@@ -136,7 +141,10 @@ class Network:
         )
 
     def predict_one(self, state, sess):
-        return sess.run(self._logits, feed_dict={self.screen_input: state['screen'].reshape(1, 84, 84, 5)})
+        return sess.run(
+            self._logits,
+            feed_dict={self.screen_input: state['screen'].reshape(1, self.screen_size, self.screen_size, 5)}
+        )
 
     def predict_batch(self, states, sess):
         return sess.run(self._logits, feed_dict={self.screen_input: states['screen']})

@@ -118,8 +118,8 @@ class MineralsAgent(base_agent.BaseAgent):
 
     def getScreenCoords(self, array):
         m = np.argmax(array)
-        y = m // 84
-        x = m % 84
+        y = m // config['screen_size']
+        x = m % config['screen_size']
         return x, y
 
     def step(self, obs):

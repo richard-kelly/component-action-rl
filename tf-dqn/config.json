@@ -18,5 +18,7 @@
     "decay_type": "exponential",
 
     "debug_logging": false,
-    "log_frequency": 200
+    "log_frequency": 200,
+
+    "screen_size": 84
 }
