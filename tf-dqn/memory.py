@@ -32,9 +32,9 @@ class Memory:
                 shape = tuple([self._max_steps] + list(state[key].shape))
                 self._samples['state'][key] = np.zeros(shape, dtype=np.float)
                 self._samples['next_state'][key] = np.zeros(shape, dtype=np.float)
-
+            print(action)
             for key in action.keys():
-                shape = tuple([self._max_steps] + list(action[key].shape))
+                shape = tuple([self._max_steps] + [1])
                 self._samples['action'][key] = np.zeros(shape, dtype=np.int)
 
         # replace memory in index position

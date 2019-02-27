@@ -92,7 +92,7 @@ class Network:
         # MUST flatten conv or pooling layers before sending to dense layer
         non_spatial_flat = tf.reshape(
             max_pool,
-            shape=[-1, self.screen_size * self.screen_size / 9 * 32],
+            shape=[-1, int(self.screen_size * self.screen_size / 9 * 32)],
             name='conv2_spatial_flat'
         )
         fc_non_spatial = tf.layers.dense(non_spatial_flat, 512, activation=tf.nn.relu, name='fc_spatial')
