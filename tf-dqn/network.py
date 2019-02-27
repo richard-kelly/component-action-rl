@@ -26,10 +26,8 @@ class Network:
         self.screen_input = tf.placeholder(shape=[None, 84, 84, 5], dtype=tf.float32)
         self._q_s_a = dict(
             function=tf.placeholder(shape=[None, 4], dtype=tf.float32),
-            screen_x=tf.placeholder(shape=[None, 84], dtype=tf.float32),
-            screen_y=tf.placeholder(shape=[None, 84], dtype=tf.float32),
-            screen2_x=tf.placeholder(shape=[None, 84], dtype=tf.float32),
-            screen2_y=tf.placeholder(shape=[None, 84], dtype=tf.float32),
+            screen=tf.placeholder(shape=[None, 84 * 84], dtype=tf.float32),
+            screen2=tf.placeholder(shape=[None, 84 * 84], dtype=tf.float32),
             select_point_act=tf.placeholder(shape=[None, 4], dtype=tf.float32),
             select_add=tf.placeholder(shape=[None, 2], dtype=tf.float32),
             queued=tf.placeholder(shape=[None, 2], dtype=tf.float32)
@@ -83,9 +81,16 @@ class Network:
             name='conv2_spatial'
         )
 
+        max_pool = tf.layers.max_pooling2d(
+            inputs=conv2_spatial,
+            pool_size=3,
+            strides=3,
+            padding='valid'
+        )
+
         # MUST flatten conv or pooling layers before sending to dense layer
-        conv2_spatial_flat = tf.reshape(conv2_spatial, [-1, 84 * 84 * 32], name='conv2_spatial_flat')
-        fc_spatial = tf.layers.dense(conv2_spatial_flat, 1024, activation=tf.nn.relu, name='fc_spatial')
+        non_spatial_flat = tf.reshape(max_pool, [-1, 28 * 28 * 32], name='conv2_spatial_flat')
+        fc_non_spatial = tf.layers.dense(non_spatial_flat, 512, activation=tf.nn.relu, name='fc_spatial')
 
         spatial_policy_1 = tf.layers.conv2d(
             inputs=conv2_spatial,
@@ -104,14 +109,12 @@ class Network:
         )
 
         self._logits = dict(
-            function=tf.layers.dense(fc_spatial, 4, name='function'),
-            screen_x=tf.reshape(tf.reduce_max(spatial_policy_1, axis=2), [-1, 84], name='screen_x'),
-            screen_y=tf.reshape(tf.reduce_max(spatial_policy_1, axis=1), [-1, 84], name='screen_y'),
-            screen2_x=tf.reshape(tf.reduce_max(spatial_policy_2, axis=2), [-1, 84], name='screen2_x'),
-            screen2_y=tf.reshape(tf.reduce_max(spatial_policy_2, axis=1), [-1, 84], name='screen2_y'),
-            select_point_act=tf.layers.dense(fc_spatial, 4, name='select_point_act'),
-            select_add=tf.layers.dense(fc_spatial, 2, name='select_add'),
-            queued=tf.layers.dense(fc_spatial, 2, name='queued')
+            function=tf.layers.dense(fc_non_spatial, 4, name='function'),
+            screen=tf.reshape(spatial_policy_1, [-1, 84 * 84], name='screen_policy'),
+            screen2=tf.reshape(spatial_policy_2, [-1, 84 * 84], name='screen2_policy'),
+            select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act'),
+            select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add'),
+            queued=tf.layers.dense(fc_non_spatial, 2, name='queued')
         )
 
         losses = []
@@ -144,10 +147,8 @@ class Network:
             feed_dict={
                 self.screen_input: x_batch['screen'],
                 self._q_s_a['function']: y_batch['function'],
-                self._q_s_a['screen_x']: y_batch['screen_x'],
-                self._q_s_a['screen_y']: y_batch['screen_y'],
-                self._q_s_a['screen2_x']: y_batch['screen2_x'],
-                self._q_s_a['screen2_y']: y_batch['screen2_y'],
+                self._q_s_a['screen']: y_batch['screen'],
+                self._q_s_a['screen2']: y_batch['screen2'],
                 self._q_s_a['select_point_act']: y_batch['select_point_act'],
                 self._q_s_a['select_add']: y_batch['select_add'],
                 self._q_s_a['queued']: y_batch['queued']

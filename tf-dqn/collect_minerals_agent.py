@@ -103,13 +103,24 @@ class MineralsAgent(base_agent.BaseAgent):
         args = []
         for i in range(len(FUNCTIONS[id].args)):
             if FUNCTIONS[id].args[i].name == 'screen':
-                args.append([action['screen_x'], action['screen_y']])
+                x, y = self.getScreenCoords(action['screen'])
+                args.append([x, y])
             elif FUNCTIONS[id].args[i].name == 'screen2':
-                args.append([action['screen2_x'], action['screen2_y']])
+                x, y = self.getScreenCoords(action['screen2'])
+                args.append([x, y])
+            elif FUNCTIONS[id].args[i].name == 'queued':
+                # no queueing
+                args.append([0])
             else:
                 args.append([action[FUNCTIONS[id].args[i].name]])
         # print(m + 'Valid action: ' + FUNCTIONS[id].name)
         return actions.FunctionCall(id, args), True
+
+    def getScreenCoords(self, array):
+        m = np.argmax(array)
+        y = m // 84
+        x = m % 84
+        return x, y
 
     def step(self, obs):
         super().step(obs)
