@@ -116,10 +116,9 @@ class MineralsAgent(base_agent.BaseAgent):
         # print(m + 'Valid action: ' + FUNCTIONS[id].name)
         return actions.FunctionCall(id, args), True
 
-    def getScreenCoords(self, array):
-        m = np.argmax(array)
-        y = m // 84
-        x = m % 84
+    def getScreenCoords(self, val):
+        y = val // 84
+        x = val % 84
         return x, y
 
     def step(self, obs):
