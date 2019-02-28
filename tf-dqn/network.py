@@ -62,7 +62,8 @@ class Network:
                 non_spatial_flat,
                 512,
                 activation=tf.nn.relu,
-                name='fc_spatial'
+                kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
+                name='fc_1'
             )
 
             spatial_policy_1 = tf.layers.conv2d(
