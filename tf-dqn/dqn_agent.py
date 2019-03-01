@@ -113,11 +113,12 @@ class DQNAgent:
         if random.random() < self._epsilon:
             if self._sample_action is None:
                 # store one action to serve as action specification
-                self._sample_action = self._network.predict_one(state, self._sess)
+                _, self._sample_action = self._network.predict_one(state, self._sess)
             for name, logits in self._sample_action.items():
                 action[name] = random.randint(0, logits.shape[1] - 1)
         else:
-            pred = self._network.predict_one(state, self._sess)
+            summary, pred = self._network.predict_one(state, self._sess)
+            self._writer.add_summary(summary)
             for name, q_values in pred.items():
                 action[name] = np.argmax(q_values)
         return action
