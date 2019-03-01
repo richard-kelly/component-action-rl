@@ -28,7 +28,10 @@ class DQNAgent:
         self._time_count = 0
 
         # initialize epsilon
-        self._epsilon = config['initial_epsilon']
+        if not config['run_model_no_training']:
+            self._epsilon = config['initial_epsilon']
+        else:
+            self._epsilon = 0.0
         if config['decay_type'] is "exponential":
             self._decay = math.exp(math.log(config['final_epsilon'] / config['initial_epsilon'])/config['decay_steps'])
         elif config['decay_type'] is "linear":
@@ -57,45 +60,45 @@ class DQNAgent:
             self._network.update_target_q_net(self._sess)
 
     def observe(self, terminal=False, reward=0):
-        self._last_reward = reward
-        # at end of episode store memory sample with None for next state
-        # set last_state to None so that on next act() we know it is beginning of episode
-        if terminal:
-            self._memory.add_sample(self._last_state, self._last_action, reward, None, True)
-            self._last_state = None
-            self._episodes += 1
+        if not config['run_model_no_training']:
+            self._last_reward = reward
+            # at end of episode store memory sample with None for next state
+            # set last_state to None so that on next act() we know it is beginning of episode
+            if terminal:
+                self._memory.add_sample(self._last_state, self._last_action, reward, None, True)
+                self._last_state = None
+                self._episodes += 1
 
     def act(self, state):
-
-        if self._last_state is not None:
-            self._memory.add_sample(self._last_state, self._last_action, self._last_reward, state, False)
-
         action = self._choose_action(state)
-
         self._steps += 1
 
-        # update target network parameters occasionally
-        if self._steps % config['target_update_frequency'] == 0:
-            print('updating target network')
-            self._network.update_target_q_net(self._sess)
+        if not config['run_model_no_training']:
+            if self._last_state is not None:
+                self._memory.add_sample(self._last_state, self._last_action, self._last_reward, state, False)
 
-        # do a batch of learning every "update_frequency" steps
-        if self._steps % config['update_frequency'] == 0 and self._memory.get_size() >= config['memory_burn_in']:
-            self._replay()
+            # update target network parameters occasionally
+            if self._steps % config['target_update_frequency'] == 0:
+                print('updating target network')
+                self._network.update_target_q_net(self._sess)
 
-        # save checkpoint if needed
-        if self._steps % config['model_checkpoint_frequency'] == 0:
-            save_path = self._network.saver.save(
-                sess=self._sess,
-                save_path=config['model_dir'] + '/model.ckpt',
-                global_step=self._steps
-            )
-            print("Model saved in path: %s" % save_path)
+            # do a batch of learning every "update_frequency" steps
+            if self._steps % config['update_frequency'] == 0 and self._memory.get_size() >= config['memory_burn_in']:
+                self._replay()
 
-        self._update_epsilon()
+            # save checkpoint if needed
+            if self._steps % config['model_checkpoint_frequency'] == 0:
+                save_path = self._network.saver.save(
+                    sess=self._sess,
+                    save_path=config['model_dir'] + '/model.ckpt',
+                    global_step=self._steps
+                )
+                print("Model saved in path: %s" % save_path)
 
-        self._last_state = state
-        self._last_action = action
+            self._update_epsilon()
+
+            self._last_state = state
+            self._last_action = action
 
         return action
 
@@ -110,17 +113,17 @@ class DQNAgent:
         if random.random() < self._epsilon:
             if self._sample_action is None:
                 # store one action to serve as action specification
-                self._sample_action = self._network.predict_one(state, self._sess)
+                _, self._sample_action = self._network.predict_one(state, self._sess)
             for name, logits in self._sample_action.items():
                 action[name] = random.randint(0, logits.shape[1] - 1)
         else:
-            pred = self._network.predict_one(state, self._sess)
+            summary, pred = self._network.predict_one(state, self._sess)
+            self._writer.add_summary(summary)
             for name, q_values in pred.items():
                 action[name] = np.argmax(q_values)
         return action
 
     def _replay(self):
-
         last_time = time.time()
 
         # states stored in memory as tuple (state, action, reward, next_state)
@@ -130,7 +133,8 @@ class DQNAgent:
         self._times['sample'] += time.time() - last_time
         last_time = time.time()
 
-        self._network.train_batch(self._sess, states, actions, rewards, next_states, is_terminal * -1)
+        summary = self._network.train_batch(self._sess, states, actions, rewards, next_states, is_terminal * -1)
+        self._writer.add_summary(summary, self._steps)
 
         self._times['train_batch'] += time.time() - last_time
         self._time_count += 1

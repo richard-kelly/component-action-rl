@@ -91,11 +91,18 @@ class Network:
                 queued=tf.layers.dense(fc_non_spatial, 2, name='queued')
             )
 
+            tf.summary.histogram('function_logits', logits['function'])
+            tf.summary.histogram('screen_logits', logits['screen'])
+            tf.summary.histogram('screen2_logits', logits['screen2'])
+
         return logits
 
     def _define_model(self):
-
-        self._states = tf.placeholder(shape=[None, self._screen_size, self._screen_size, 5], dtype=tf.float32, name='states_placeholder')
+        self._states = tf.placeholder(
+            shape=[None, self._screen_size, self._screen_size, 5],
+            dtype=tf.float32,
+            name='states_placeholder'
+        )
         with tf.variable_scope('action_placeholders'):
             self._actions = dict(
                 function=tf.placeholder(shape=[None, ], dtype=tf.int32, name='function'),
@@ -106,7 +113,11 @@ class Network:
                 queued=tf.placeholder(shape=[None, ], dtype=tf.int32, name='queued')
             )
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
-        self._next_states = tf.placeholder(shape=[None, self._screen_size, self._screen_size, 5], dtype=tf.float32, name='next_states_placeholder')
+        self._next_states = tf.placeholder(
+            shape=[None, self._screen_size, self._screen_size, 5],
+            dtype=tf.float32,
+            name='next_states_placeholder'
+        )
         self._not_terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='not_terminal_placeholder')
 
         self._q = self._get_network(self._states, 'Q_primary')
@@ -145,11 +156,18 @@ class Network:
         with tf.variable_scope('losses'):
             losses = []
             for name in y.keys():
-                losses.append(tf.losses.mean_squared_error(pred[name], tf.stop_gradient(y[name])))
+                # loss = tf.losses.mean_squared_error(pred[name], tf.stop_gradient(y[name]))
+                loss = tf.losses.huber_loss(pred[name], tf.stop_gradient(y[name]))
+                tf.summary.scalar('training_loss_' + name, loss)
+                losses.append(loss)
+            losses_sum = tf.add_n(losses, name='losses_sum')
+            tf.summary.scalar('training_loss_total', losses_sum)
 
-            loss = tf.add_n(losses, name='losses_sum')
+        self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(losses_sum)
 
-        self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(loss)
+        # tensorboard
+        self._predict_summaries = tf.summary.merge_all(scope='Q_primary')
+        self._train_summaries = tf.summary.merge_all(scope='losses')
 
         self.var_init = tf.global_variables_initializer()
 
@@ -163,14 +181,14 @@ class Network:
 
     def predict_one(self, state, sess):
         return sess.run(
-            self._q,
+            [self._predict_summaries, self._q],
             feed_dict={self._states: state['screen'].reshape(1, self._screen_size, self._screen_size, 5)}
         )
 
     def train_batch(self, sess, states, actions, rewards, next_states, not_terminal):
         batch = actions['function'].shape[0]
-        sess.run(
-            self._optimizer,
+        summary, _ = sess.run(
+            [self._train_summaries, self._optimizer],
             feed_dict={
                 self._states: states['screen'],
                 self._actions['function']: actions['function'].reshape(batch),
@@ -184,4 +202,6 @@ class Network:
                 self._not_terminal: not_terminal
             }
         )
+
+        return summary
 

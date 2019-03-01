@@ -1,4 +1,7 @@
 {
+
+    "run_model_no_training": false,
+
     "model_dir": "models/minerals_target_2",
     "model_checkpoint_frequency": 20000,
     "model_checkpoint_max": 2,
