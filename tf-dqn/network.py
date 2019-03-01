@@ -94,7 +94,6 @@ class Network:
         return logits
 
     def _define_model(self):
-
         self._states = tf.placeholder(shape=[None, self._screen_size, self._screen_size, 5], dtype=tf.float32, name='states_placeholder')
         with tf.variable_scope('action_placeholders'):
             self._actions = dict(
@@ -148,8 +147,12 @@ class Network:
                 losses.append(tf.losses.mean_squared_error(pred[name], tf.stop_gradient(y[name])))
 
             loss = tf.add_n(losses, name='losses_sum')
+        tf.summary.scalar('training_loss', loss)
 
         self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(loss)
+
+        # tensorboard
+        self._summaries = tf.summary.merge_all()
 
         self.var_init = tf.global_variables_initializer()
 
@@ -169,8 +172,8 @@ class Network:
 
     def train_batch(self, sess, states, actions, rewards, next_states, not_terminal):
         batch = actions['function'].shape[0]
-        sess.run(
-            self._optimizer,
+        summary, _ = sess.run(
+            [self._summaries, self._optimizer],
             feed_dict={
                 self._states: states['screen'],
                 self._actions['function']: actions['function'].reshape(batch),
@@ -184,4 +187,6 @@ class Network:
                 self._not_terminal: not_terminal
             }
         )
+
+        return summary
 

@@ -130,7 +130,8 @@ class DQNAgent:
         self._times['sample'] += time.time() - last_time
         last_time = time.time()
 
-        self._network.train_batch(self._sess, states, actions, rewards, next_states, is_terminal * -1)
+        summary = self._network.train_batch(self._sess, states, actions, rewards, next_states, is_terminal * -1)
+        self._writer.add_summary(summary, self._steps)
 
         self._times['train_batch'] += time.time() - last_time
         self._time_count += 1
