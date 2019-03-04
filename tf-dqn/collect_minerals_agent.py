@@ -108,9 +108,9 @@ class MineralsAgent(base_agent.BaseAgent):
             elif FUNCTIONS[id].args[i].name == 'screen2':
                 x, y = self.getScreenCoords(action['screen2'])
                 args.append([x, y])
-            elif FUNCTIONS[id].args[i].name == 'queued':
-                # no queueing
-                args.append([0])
+            # elif FUNCTIONS[id].args[i].name == 'queued':
+            #     # no queueing
+            #     args.append([0])
             else:
                 args.append([action[FUNCTIONS[id].args[i].name]])
         # print(m + 'Valid action: ' + FUNCTIONS[id].name)
