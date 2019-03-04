@@ -32,9 +32,9 @@ class DQNAgent:
             self._epsilon = config['initial_epsilon']
         else:
             self._epsilon = 0.0
-        if config['decay_type'] is "exponential":
+        if config['decay_type'] == "exponential":
             self._decay = math.exp(math.log(config['final_epsilon'] / config['initial_epsilon'])/config['decay_steps'])
-        elif config['decay_type'] is "linear":
+        elif config['decay_type'] == "linear":
             self._decay = (config['initial_epsilon'] - config['final_epsilon']) / config['decay_steps']
 
         self._memory = Memory(config['memory_size'])
@@ -103,9 +103,9 @@ class DQNAgent:
         return action
 
     def _update_epsilon(self):
-        if config['decay_type'] is "exponential":
+        if config['decay_type'] == "exponential":
             self._epsilon = self._epsilon * self._decay
-        elif config['decay_type'] is "linear":
+        elif config['decay_type'] == "linear":
             self._epsilon = self._epsilon - self._decay
 
     def _choose_action(self, state):
