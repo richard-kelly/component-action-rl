@@ -37,8 +37,6 @@ class MineralsAgent(base_agent.BaseAgent):
     def __init__(self):
         super().__init__()
         self.validLastAction = False
-        self.rewardCount = 0
-        self.episodeCount = 0
         self.rl_agent = DQNAgent(restore)
 
     def preprocess_state(self, obs):
@@ -54,36 +52,6 @@ class MineralsAgent(base_agent.BaseAgent):
         # state['available_actions'] = avail_actions
 
         return state
-
-    def format_all_actions_spec(self, action_spec):
-        # ALL ACTIONS
-        # all_actions = {'function': dict(type='int', num_actions=len(action_spec.functions))}
-
-        # version with limited action functions to speed up learning of simple minigame
-        all_actions = {'function': dict(type='int', num_actions=len(relevant_actions))}
-        for argument_type in action_spec.types:
-            # the only arguments with a shape that isn't (1) are the screen and minimap ones,
-            # so we're assuming the screen/minimap dimensions are square here
-            spec = dict(type='int', shape=(len(argument_type.sizes),), num_actions=argument_type.sizes[0])
-            all_actions[argument_type.name] = spec
-        return all_actions
-
-    def format_some_actions_spec(self, action_spec):
-        return dict(
-            function=dict(type='int', num_actions=len(relevant_actions)),
-            screen=dict(type='int', shape=(1,), num_actions=84),
-            screen2=dict(type='int', shape=(1,), num_actions=84),
-            select_point_act=dict(type='int', shape=(1,), num_actions=4),
-            select_add=dict(type='int', shape=(1,), num_actions=2),
-            queued=dict(type='int', shape=(1,), num_actions=2)
-        )
-
-    def getStateSpec(self, obs_spec):
-        states = dict(
-            screen=dict(type='float', shape=(84, 84, 5)),
-            # available_actions=dict(type='float', shape=(len(FUNCTIONS)))
-        )
-        return states
 
     def setup(self, obs_spec, action_spec):
         super().setup(obs_spec, action_spec)
@@ -125,20 +93,6 @@ class MineralsAgent(base_agent.BaseAgent):
         super().step(obs)
         state = self.preprocess_state(obs)
 
-        self.rewardCount += obs.reward
-
-        # writes out the average reward every 100 episodes
-        if obs.step_type is StepType.LAST:
-            self.episodeCount += 1
-            if self.episodeCount == 100:
-                out = open(config['model_dir'] + '/rewards.txt', 'a')
-                out.write(str(self.steps) + ", " + str((self.rewardCount / 100)) + '\n')
-                out.close()
-                self.rewardCount = 0
-                self.episodeCount = 0
-
-        # print(obs.observation['game_loop'])
-        # print('reward: ', obs.reward)
         terminal = True if obs.step_type is StepType.LAST else False
 
         if self.steps > 1:
