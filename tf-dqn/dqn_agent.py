@@ -51,9 +51,14 @@ class DQNAgent:
 
         if restore:
             try:
-                self._network.saver.restore(self._sess, config['model_dir'] + '/model.ckpt')
-                print("Model restored.")
+                checkpoint = tf.train.get_checkpoint_state(config['model_dir'])
+                self._network.saver.restore(self._sess, checkpoint.model_checkpoint_path)
+                self._steps = int(checkpoint.model_checkpoint_path.split('-')[-1])
+                # this makes sure tensorboard deletes any "future" events logged after the checkpoint
+                self._writer.add_session_log(tf.SessionLog(status=tf.SessionLog.START), global_step=self._steps)
             except ValueError:
+                # if the directory exists but there's no checkpoints, just continue
+                # usually because a test crashed immediately last time
                 self._sess.run(self._network.var_init)
                 self._network.update_target_q_net(self._sess)
         else:
