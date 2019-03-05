@@ -16,6 +16,7 @@ class DQNAgent:
     def __init__(self, restore):
         self._steps = 0
         self._episodes = 0
+        self._episode_score = 0
         self._last_state = None
         self._last_reward = None
         self._last_action = None
@@ -60,6 +61,12 @@ class DQNAgent:
             self._network.update_target_q_net(self._sess)
 
     def observe(self, terminal=False, reward=0):
+        self._episode_score += reward
+        if terminal:
+            summary = self._network.episode_summary(self._sess, self._episode_score)
+            self._writer.add_summary(summary, self._steps)
+            self._episode_score = 0
+
         if not config['run_model_no_training']:
             self._last_reward = reward
             # at end of episode store memory sample with None for next state
@@ -113,12 +120,12 @@ class DQNAgent:
         if random.random() < self._epsilon:
             if self._sample_action is None:
                 # store one action to serve as action specification
-                _, self._sample_action = self._network.predict_one(state, self._sess)
+                _, self._sample_action = self._network.predict_one(self._sess, state)
             for name, logits in self._sample_action.items():
                 action[name] = random.randint(0, logits.shape[1] - 1)
         else:
-            summary, pred = self._network.predict_one(state, self._sess)
-            self._writer.add_summary(summary)
+            summary, pred = self._network.predict_one(self._sess, state)
+            self._writer.add_summary(summary, self._steps)
             for name, q_values in pred.items():
                 action[name] = np.argmax(q_values)
         return action

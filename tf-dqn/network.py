@@ -26,74 +26,69 @@ class Network:
         # now setup the model
         self._define_model()
 
-    def _get_network(self, inputs, scope_name):
-        with tf.variable_scope(scope_name):
-            conv1_spatial = tf.layers.conv2d(
-                inputs=inputs,
-                filters=16,
-                kernel_size=5,
-                padding='same',
-                name='conv1_spatial'
-            )
+    def _get_network(self, inputs):
+        conv1_spatial = tf.layers.conv2d(
+            inputs=inputs,
+            filters=16,
+            kernel_size=5,
+            padding='same',
+            name='conv1_spatial'
+        )
 
-            conv2_spatial = tf.layers.conv2d(
-                inputs=conv1_spatial,
-                filters=32,
-                kernel_size=3,
-                padding='same',
-                name='conv2_spatial'
-            )
+        conv2_spatial = tf.layers.conv2d(
+            inputs=conv1_spatial,
+            filters=32,
+            kernel_size=3,
+            padding='same',
+            name='conv2_spatial'
+        )
 
-            max_pool = tf.layers.max_pooling2d(
-                inputs=conv2_spatial,
-                pool_size=3,
-                strides=3,
-                padding='valid',
-                name='max_pool'
-            )
+        max_pool = tf.layers.max_pooling2d(
+            inputs=conv2_spatial,
+            pool_size=3,
+            strides=3,
+            padding='valid',
+            name='max_pool'
+        )
 
-            # MUST flatten conv or pooling layers before sending to dense layer
-            non_spatial_flat = tf.reshape(
-                max_pool,
-                shape=[-1, int(self._screen_size * self._screen_size / 9 * 32)],
-                name='conv2_spatial_flat'
-            )
-            fc_non_spatial = tf.layers.dense(
-                non_spatial_flat,
-                512,
-                activation=tf.nn.relu,
-                kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-                name='fc_1'
-            )
+        # MUST flatten conv or pooling layers before sending to dense layer
+        non_spatial_flat = tf.reshape(
+            max_pool,
+            shape=[-1, int(self._screen_size * self._screen_size / 9 * 32)],
+            name='conv2_spatial_flat'
+        )
+        fc_non_spatial = tf.layers.dense(
+            non_spatial_flat,
+            512,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
+            name='fc_1'
+        )
 
-            spatial_policy_1 = tf.layers.conv2d(
-                inputs=conv2_spatial,
-                filters=1,
-                kernel_size=1,
-                padding='same',
-                name='spatial_policy_1'
-            )
+        spatial_policy_1 = tf.layers.conv2d(
+            inputs=conv2_spatial,
+            filters=1,
+            kernel_size=1,
+            padding='same',
+            name='spatial_policy_1'
+        )
 
-            spatial_policy_2 = tf.layers.conv2d(
-                inputs=conv2_spatial,
-                filters=1,
-                kernel_size=1,
-                padding='same',
-                name='spatial_policy_2'
-            )
+        spatial_policy_2 = tf.layers.conv2d(
+            inputs=conv2_spatial,
+            filters=1,
+            kernel_size=1,
+            padding='same',
+            name='spatial_policy_2'
+        )
 
-            logits = dict(
-                function=tf.layers.dense(fc_non_spatial, 4, name='function'),
-                screen=tf.reshape(spatial_policy_1, [-1, self._screen_size * self._screen_size], name='screen_policy'),
-                screen2=tf.reshape(spatial_policy_2, [-1, self._screen_size * self._screen_size], name='screen2_policy'),
-                select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act'),
-                select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add'),
-                queued=tf.layers.dense(fc_non_spatial, 2, name='queued')
-            )
-
-            tf.summary.histogram('function_logits', logits['function'])
-            tf.summary.histogram('screen_logits', logits['screen'])
-            tf.summary.histogram('screen2_logits', logits['screen2'])
+        logits = dict(
+            function=tf.layers.dense(fc_non_spatial, 4, name='function'),
+            screen=tf.reshape(spatial_policy_1, [-1, self._screen_size * self._screen_size], name='screen_policy'),
+            screen2=tf.reshape(spatial_policy_2, [-1, self._screen_size * self._screen_size], name='screen2_policy'),
+            select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act'),
+            select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add'),
+            queued=tf.layers.dense(fc_non_spatial, 2, name='queued')
+        )
 
         return logits
 
@@ -120,8 +115,10 @@ class Network:
         )
         self._not_terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='not_terminal_placeholder')
 
-        self._q = self._get_network(self._states, 'Q_primary')
-        self._q_target = self._get_network(self._next_states, 'Q_target')
+        with tf.variable_scope('Q_primary'):
+            self._q = self._get_network(self._states)
+        with tf.variable_scope('Q_target'):
+            self._q_target = self._get_network(self._next_states)
 
         self._q_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_primary")
         self._q_target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_target")
@@ -181,8 +178,18 @@ class Network:
         self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(losses_sum)
 
         # tensorboard
-        self._predict_summaries = tf.summary.merge_all(scope='Q_primary')
         self._train_summaries = tf.summary.merge_all(scope='losses')
+
+        with tf.variable_scope('episode_summaries'):
+            self._episode_score = tf.placeholder(shape=[], dtype=tf.float32, name='episode_score')
+            tf.summary.scalar('episode_score', self._episode_score)
+        self._episode_summaries = tf.summary.merge_all(scope='episode_summaries')
+
+        with tf.variable_scope('predict_summaries'):
+            for name, q_vals in self._q.items():
+                action_q_val = tf.reduce_max(q_vals, name=name)
+                tf.summary.scalar('step_q_' + name, action_q_val)
+        self._predict_summaries = tf.summary.merge_all(scope='predict_summaries')
 
         self.var_init = tf.global_variables_initializer()
 
@@ -191,10 +198,13 @@ class Network:
             keep_checkpoint_every_n_hours=self._checkpoint_hours
         )
 
+    def episode_summary(self, sess, score):
+        return sess.run(self._episode_summaries, feed_dict={self._episode_score: score})
+
     def update_target_q_net(self, sess):
         sess.run([v_t.assign(v) for v_t, v in zip(self._q_target_vars, self._q_vars)])
 
-    def predict_one(self, state, sess):
+    def predict_one(self, sess, state):
         return sess.run(
             [self._predict_summaries, self._q],
             feed_dict={self._states: state['screen'].reshape(1, self._screen_size, self._screen_size, 5)}
