@@ -37,6 +37,8 @@ class DQNAgent:
             self._decay = math.exp(math.log(config['final_epsilon'] / config['initial_epsilon'])/config['decay_steps'])
         elif config['decay_type'] == "linear":
             self._decay = (config['initial_epsilon'] - config['final_epsilon']) / config['decay_steps']
+        else:
+            self._decay = 0.0
 
         self._memory = Memory(config['memory_size'])
         self._network = Network(
@@ -56,6 +58,11 @@ class DQNAgent:
                 self._steps = int(checkpoint.model_checkpoint_path.split('-')[-1])
                 # this makes sure tensorboard deletes any "future" events logged after the checkpoint
                 self._writer.add_session_log(tf.SessionLog(status=tf.SessionLog.START), global_step=self._steps)
+
+                # adjust epsilon for current step
+                self._update_epsilon(min(config['decay_steps'], self._steps))
+                print("Model restored at step: ", self._steps, ", epsilon: ", self._epsilon)
+
             except ValueError:
                 # if the directory exists but there's no checkpoints, just continue
                 # usually because a test crashed immediately last time
@@ -107,18 +114,19 @@ class DQNAgent:
                 )
                 print("Model saved in path: %s" % save_path)
 
-            self._update_epsilon()
+            if self._steps <= config['decay_steps']:
+                self._update_epsilon()
 
             self._last_state = state
             self._last_action = action
 
         return action
 
-    def _update_epsilon(self):
+    def _update_epsilon(self, steps=1):
         if config['decay_type'] == "exponential":
-            self._epsilon = self._epsilon * self._decay
+            self._epsilon = self._epsilon * (self._decay ** steps)
         elif config['decay_type'] == "linear":
-            self._epsilon = self._epsilon - self._decay
+            self._epsilon = self._epsilon - (self._decay * steps)
 
     def _choose_action(self, state):
         action = {}
