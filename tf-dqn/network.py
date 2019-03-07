@@ -75,20 +75,20 @@ class Network:
             name='spatial_policy_1'
         )
 
-        spatial_policy_2 = tf.layers.conv2d(
-            inputs=conv2_spatial,
-            filters=1,
-            kernel_size=1,
-            padding='same',
-            name='spatial_policy_2'
-        )
+        # spatial_policy_2 = tf.layers.conv2d(
+        #     inputs=conv2_spatial,
+        #     filters=1,
+        #     kernel_size=1,
+        #     padding='same',
+        #     name='spatial_policy_2'
+        # )
 
         logits = dict(
             function=tf.layers.dense(fc_non_spatial, 4, name='function'),
             screen=tf.reshape(spatial_policy_1, [-1, self._screen_size * self._screen_size], name='screen_policy'),
-            screen2=tf.reshape(spatial_policy_2, [-1, self._screen_size * self._screen_size], name='screen2_policy'),
-            select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act'),
-            select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add'),
+            # screen2=tf.reshape(spatial_policy_2, [-1, self._screen_size * self._screen_size], name='screen2_policy'),
+            # select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act'),
+            # select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add'),
             # queued=tf.layers.dense(fc_non_spatial, 2, name='queued')
         )
 
@@ -104,9 +104,9 @@ class Network:
             self._actions = dict(
                 function=tf.placeholder(shape=[None, ], dtype=tf.int32, name='function'),
                 screen=tf.placeholder(shape=[None, ], dtype=tf.int32, name='screen'),
-                screen2=tf.placeholder(shape=[None, ], dtype=tf.int32, name='screen2'),
-                select_point_act=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_point_act'),
-                select_add=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_add'),
+                # screen2=tf.placeholder(shape=[None, ], dtype=tf.int32, name='screen2'),
+                # select_point_act=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_point_act'),
+                # select_add=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_add'),
                 # queued=tf.placeholder(shape=[None, ], dtype=tf.int32, name='queued')
             )
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
@@ -129,9 +129,9 @@ class Network:
             action_one_hot = dict(
                 function=tf.one_hot(self._actions['function'], 4, 1.0, 0.0, name='function'),
                 screen=tf.one_hot(self._actions['screen'], self._screen_size * self._screen_size, 1.0, 0.0, name='screen'),
-                screen2=tf.one_hot(self._actions['screen2'], self._screen_size * self._screen_size, 1.0, 0.0, name='screen2'),
-                select_point_act=tf.one_hot(self._actions['select_point_act'], 4, 1.0, 0.0, name='select_point_act'),
-                select_add=tf.one_hot(self._actions['select_add'], 2, 1.0, 0.0, name='select_add'),
+                # screen2=tf.one_hot(self._actions['screen2'], self._screen_size * self._screen_size, 1.0, 0.0, name='screen2'),
+                # select_point_act=tf.one_hot(self._actions['select_point_act'], 4, 1.0, 0.0, name='select_point_act'),
+                # select_add=tf.one_hot(self._actions['select_add'], 2, 1.0, 0.0, name='select_add'),
                 # queued=tf.one_hot(self._actions['queued'], 2, 1.0, 0.0, name='queued')
             )
 
@@ -158,9 +158,9 @@ class Network:
             masks = dict(
                 function=tf.constant([1, 1, 1, 1], dtype=tf.float32, name='function'),
                 screen=tf.constant([0, 1, 1, 1], dtype=tf.float32, name='screen'),
-                screen2=tf.constant([0, 0, 1, 0], dtype=tf.float32, name='screen2'),
-                select_point_act=tf.constant([0, 1, 0, 0], dtype=tf.float32, name='select_point_act'),
-                select_add=tf.constant([0, 0, 1, 0], dtype=tf.float32, name='select_add'),
+                # screen2=tf.constant([0, 0, 1, 0], dtype=tf.float32, name='screen2'),
+                # select_point_act=tf.constant([0, 1, 0, 0], dtype=tf.float32, name='select_point_act'),
+                # select_add=tf.constant([0, 0, 1, 0], dtype=tf.float32, name='select_add'),
                 # queued=tf.constant([0, 0, 0, 1], dtype=tf.float32, name='queued'),
             )
 
@@ -220,9 +220,9 @@ class Network:
                 self._states: states['screen'],
                 self._actions['function']: actions['function'].reshape(batch),
                 self._actions['screen']: actions['screen'].reshape(batch),
-                self._actions['screen2']: actions['screen2'].reshape(batch),
-                self._actions['select_point_act']: actions['select_point_act'].reshape(batch),
-                self._actions['select_add']: actions['select_add'].reshape(batch),
+                # self._actions['screen2']: actions['screen2'].reshape(batch),
+                # self._actions['select_point_act']: actions['select_point_act'].reshape(batch),
+                # self._actions['select_add']: actions['select_add'].reshape(batch),
                 # self._actions['queued']: actions['queued'].reshape(batch),
                 self._rewards: rewards,
                 self._next_states: next_states['screen'],

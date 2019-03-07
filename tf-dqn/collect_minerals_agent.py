@@ -68,19 +68,38 @@ class MineralsAgent(base_agent.BaseAgent):
             # print(m + 'FAIL Invalid action: ' + FUNCTIONS[id].name)
             return actions.FunctionCall(0, []), False
 
+
+
         args = []
         for i in range(len(FUNCTIONS[id].args)):
-            if FUNCTIONS[id].args[i].name == 'screen':
+            # special case of func id 3, select_rect
+            if id == 3:
                 x, y = self.getScreenCoords(action['screen'])
-                args.append([x, y])
-            elif FUNCTIONS[id].args[i].name == 'screen2':
-                x, y = self.getScreenCoords(action['screen2'])
-                args.append([x, y])
-            elif FUNCTIONS[id].args[i].name == 'queued':
-                # no queueing
-                args.append([0])
+                if FUNCTIONS[id].args[i].name == 'screen':
+                    args.append([max(x - 5, 0), max(y - 5, 0)])
+                elif FUNCTIONS[id].args[i].name == 'screen2':
+                    args.append([min(x + 5, config['screen_size'] - 1), min(y + 5, config['screen_size'] - 1)])
+                elif FUNCTIONS[id].args[i].name == 'select_add':
+                    # never adds
+                    args.append([0])
             else:
-                args.append([action[FUNCTIONS[id].args[i].name]])
+                if FUNCTIONS[id].args[i].name == 'screen':
+                    x, y = self.getScreenCoords(action['screen'])
+                    args.append([x, y])
+                # elif FUNCTIONS[id].args[i].name == 'screen2':
+                #     x, y = self.getScreenCoords(action['screen2'])
+                #     args.append([x, y])
+                elif FUNCTIONS[id].args[i].name == 'queued':
+                    # no queueing
+                    args.append([0])
+                elif FUNCTIONS[id].args[i].name == 'select_point_act':
+                    # just selects at point
+                    args.append([0])
+                elif FUNCTIONS[id].args[i].name == 'select_add':
+                    # never adds
+                    args.append([0])
+                else:
+                    args.append([action[FUNCTIONS[id].args[i].name]])
         # print(m + 'Valid action: ' + FUNCTIONS[id].name)
         return actions.FunctionCall(id, args), True
 
