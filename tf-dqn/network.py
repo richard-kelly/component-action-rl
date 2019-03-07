@@ -32,7 +32,8 @@ class Network:
             filters=16,
             kernel_size=5,
             padding='same',
-            name='conv1_spatial'
+            name='conv1_spatial',
+            activation=tf.nn.relu
         )
 
         conv2_spatial = tf.layers.conv2d(
@@ -40,7 +41,8 @@ class Network:
             filters=32,
             kernel_size=3,
             padding='same',
-            name='conv2_spatial'
+            name='conv2_spatial',
+            activation=tf.nn.relu
         )
 
         max_pool = tf.layers.max_pooling2d(
