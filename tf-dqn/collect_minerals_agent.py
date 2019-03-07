@@ -68,38 +68,30 @@ class MineralsAgent(base_agent.BaseAgent):
             # print(m + 'FAIL Invalid action: ' + FUNCTIONS[id].name)
             return actions.FunctionCall(0, []), False
 
-
-
         args = []
         for i in range(len(FUNCTIONS[id].args)):
-            # special case of func id 3, select_rect
-            if id == 3:
+            name = FUNCTIONS[id].args[i].name
+            # special case of func id 3, select_rect, used only if 'screen2' isn't output by network
+            # just select a rectangle around the point given by 'screen'
+            if id == 3 and (name == 'screen' or name == 'screen2') and 'screen2' not in action:
+                half_rect = 5
                 x, y = self.getScreenCoords(action['screen'])
-                if FUNCTIONS[id].args[i].name == 'screen':
-                    args.append([max(x - 5, 0), max(y - 5, 0)])
-                elif FUNCTIONS[id].args[i].name == 'screen2':
-                    args.append([min(x + 5, config['screen_size'] - 1), min(y + 5, config['screen_size'] - 1)])
-                elif FUNCTIONS[id].args[i].name == 'select_add':
-                    # never adds
-                    args.append([0])
+                if name == 'screen':
+                    args.append([max(x - half_rect, 0), max(y - half_rect, 0)])
+                elif name == 'screen2':
+                    args.append([min(x + half_rect, config['screen_size'] - 1), min(y + half_rect, config['screen_size'] - 1)])
             else:
-                if FUNCTIONS[id].args[i].name == 'screen':
+                if name == 'screen':
                     x, y = self.getScreenCoords(action['screen'])
                     args.append([x, y])
-                # elif FUNCTIONS[id].args[i].name == 'screen2':
-                #     x, y = self.getScreenCoords(action['screen2'])
-                #     args.append([x, y])
-                elif FUNCTIONS[id].args[i].name == 'queued':
-                    # no queueing
-                    args.append([0])
-                elif FUNCTIONS[id].args[i].name == 'select_point_act':
-                    # just selects at point
-                    args.append([0])
-                elif FUNCTIONS[id].args[i].name == 'select_add':
-                    # never adds
+                elif name == 'screen2':
+                    x, y = self.getScreenCoords(action['screen2'])
+                    args.append([x, y])
+                elif name not in action:
+                    # if network doesn't supply argument, uses first choice, which is usually default no modifier action
                     args.append([0])
                 else:
-                    args.append([action[FUNCTIONS[id].args[i].name]])
+                    args.append([action[name]])
         # print(m + 'Valid action: ' + FUNCTIONS[id].name)
         return actions.FunctionCall(id, args), True
 
