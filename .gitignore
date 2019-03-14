@@ -3,3 +3,6 @@ tensorforce/__pycache__/
 tensorforce/models/
 tf-dqn/__pycache__/
 tf-dqn/models/
+smac/__pycache__/
+smac/models/
+examples/
