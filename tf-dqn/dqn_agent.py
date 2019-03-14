@@ -46,7 +46,7 @@ class DQNAgent:
             config['discount'],
             config['model_checkpoint_max'],
             config['model_checkpoint_every_n_hours'],
-            config['screen_size']
+            config['environment_properties']
         )
         self._sess = tf.Session()
         self._writer = tf.summary.FileWriter(config['model_dir'], self._sess.graph)

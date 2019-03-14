@@ -1,14 +1,15 @@
 import tensorflow as tf
 
-
 class Network:
-    def __init__(self, learning_rate, discount, max_checkpoints, checkpoint_hours, screen_size):
+    def __init__(self, learning_rate, discount, max_checkpoints, checkpoint_hours, environment_properties):
 
         self._learning_rate = learning_rate
         self._discount = discount
         self._max_checkpoints = max_checkpoints
         self._checkpoint_hours = checkpoint_hours
-        self._screen_size = screen_size
+
+        self._screen_size = environment_properties['screen_size']
+        self._action_components = environment_properties['action_components']
 
         # define the placeholders
         self._states = None
@@ -75,26 +76,33 @@ class Network:
             name='spatial_policy_1'
         )
 
-        # spatial_policy_2 = tf.layers.conv2d(
-        #     inputs=conv2_spatial,
-        #     filters=1,
-        #     kernel_size=1,
-        #     padding='same',
-        #     name='spatial_policy_2'
-        # )
+        comp = self._action_components
+        if comp['screen2']:
+            spatial_policy_2 = tf.layers.conv2d(
+                inputs=conv2_spatial,
+                filters=1,
+                kernel_size=1,
+                padding='same',
+                name='spatial_policy_2'
+            )
+        else:
+            spatial_policy_2 = None
 
+        n = self._screen_size
         logits = dict(
             function=tf.layers.dense(fc_non_spatial, 4, name='function'),
-            screen=tf.reshape(spatial_policy_1, [-1, self._screen_size * self._screen_size], name='screen_policy'),
-            # screen2=tf.reshape(spatial_policy_2, [-1, self._screen_size * self._screen_size], name='screen2_policy'),
-            select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act'),
-            select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add'),
-            # queued=tf.layers.dense(fc_non_spatial, 2, name='queued')
+            screen=tf.reshape(spatial_policy_1, [-1, n * n], name='screen') if comp['screen'] else None,
+            screen2=tf.reshape(spatial_policy_2, [-1, n * n], name='screen2') if comp['screen2'] else None,
+            queued=tf.layers.dense(fc_non_spatial, 2, name='queued') if comp['queued'] else None,
+            select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act') if comp['select_point_act'] else None,
+            select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add') if comp['select_add'] else None
         )
 
         return logits
 
     def _define_model(self):
+        comp = self._action_components
+
         self._states = tf.placeholder(
             shape=[None, self._screen_size, self._screen_size, 5],
             dtype=tf.float32,
@@ -103,11 +111,11 @@ class Network:
         with tf.variable_scope('action_placeholders'):
             self._actions = dict(
                 function=tf.placeholder(shape=[None, ], dtype=tf.int32, name='function'),
-                screen=tf.placeholder(shape=[None, ], dtype=tf.int32, name='screen'),
-                # screen2=tf.placeholder(shape=[None, ], dtype=tf.int32, name='screen2'),
-                select_point_act=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_point_act'),
-                select_add=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_add'),
-                # queued=tf.placeholder(shape=[None, ], dtype=tf.int32, name='queued')
+                screen=tf.placeholder(shape=[None, ], dtype=tf.int32, name='screen') if comp['screen'] else None,
+                screen2=tf.placeholder(shape=[None, ], dtype=tf.int32, name='screen2') if comp['screen2'] else None,
+                select_point_act=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_point_act') if comp['select_point_act'] else None,
+                select_add=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_add') if comp['select_add'] else None,
+                queued=tf.placeholder(shape=[None, ], dtype=tf.int32, name='queued') if comp['queued'] else None
             )
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
         self._next_states = tf.placeholder(
@@ -128,29 +136,32 @@ class Network:
         with tf.variable_scope('action_one_hot'):
             action_one_hot = dict(
                 function=tf.one_hot(self._actions['function'], 4, 1.0, 0.0, name='function'),
-                screen=tf.one_hot(self._actions['screen'], self._screen_size * self._screen_size, 1.0, 0.0, name='screen'),
-                # screen2=tf.one_hot(self._actions['screen2'], self._screen_size * self._screen_size, 1.0, 0.0, name='screen2'),
-                select_point_act=tf.one_hot(self._actions['select_point_act'], 4, 1.0, 0.0, name='select_point_act'),
-                select_add=tf.one_hot(self._actions['select_add'], 2, 1.0, 0.0, name='select_add'),
-                # queued=tf.one_hot(self._actions['queued'], 2, 1.0, 0.0, name='queued')
+                screen=tf.one_hot(self._actions['screen'], self._screen_size * self._screen_size, 1.0, 0.0, name='screen') if comp['screen'] else None,
+                screen2=tf.one_hot(self._actions['screen2'], self._screen_size * self._screen_size, 1.0, 0.0, name='screen2') if comp['screen2'] else None,
+                select_point_act=tf.one_hot(self._actions['select_point_act'], 4, 1.0, 0.0, name='select_point_act') if comp['select_point_act'] else None,
+                select_add=tf.one_hot(self._actions['select_add'], 2, 1.0, 0.0, name='select_add') if comp['select_add'] else None,
+                queued=tf.one_hot(self._actions['queued'], 2, 1.0, 0.0, name='queued') if comp['queued'] else None
             )
 
         with tf.variable_scope('prediction'):
             # The prediction by the primary Q network for the actual actions
             pred = {}
             for name, q_vals in self._q.items():
-                pred[name] = tf.reduce_sum(q_vals * action_one_hot[name], reduction_indices=-1, name=name)
+                if comp[name]:
+                    pred[name] = tf.reduce_sum(q_vals * action_one_hot[name], reduction_indices=-1, name=name)
 
         with tf.variable_scope('optimization_target'):
             # The optimization target
             max_q_next_by_target = {}
             for name, q_vals in self._q_target.items():
-                max_q_next_by_target[name] = tf.reduce_max(q_vals, axis=-1, name=name)
+                if comp[name]:
+                    max_q_next_by_target[name] = tf.reduce_max(q_vals, axis=-1, name=name)
 
         with tf.variable_scope('y'):
             y = {}
             for name, max_q_next in max_q_next_by_target.items():
-                y[name] = self._rewards + self._not_terminal * self._discount * max_q_next
+                if comp[name]:
+                    y[name] = self._rewards + self._not_terminal * self._discount * max_q_next
 
         with tf.variable_scope('argument_masks'):
             # these would have to change for different pysc2 action functions...
@@ -158,22 +169,22 @@ class Network:
             masks = dict(
                 function=tf.constant([1, 1, 1, 1], dtype=tf.float32, name='function'),
                 screen=tf.constant([0, 1, 1, 1], dtype=tf.float32, name='screen'),
-                # screen2=tf.constant([0, 0, 1, 0], dtype=tf.float32, name='screen2'),
+                screen2=tf.constant([0, 0, 1, 0], dtype=tf.float32, name='screen2'),
                 select_point_act=tf.constant([0, 1, 0, 0], dtype=tf.float32, name='select_point_act'),
                 select_add=tf.constant([0, 0, 1, 0], dtype=tf.float32, name='select_add'),
-                # queued=tf.constant([0, 0, 0, 1], dtype=tf.float32, name='queued'),
+                queued=tf.constant([0, 0, 0, 1], dtype=tf.float32, name='queued'),
             )
 
         with tf.variable_scope('losses'):
             losses = []
             for name in y.keys():
-                # loss = tf.losses.mean_squared_error(pred[name], tf.stop_gradient(y[name]))
-                mask = tf.reduce_max(action_one_hot['function'] * masks[name], axis=-1)
-                pred_masked = pred[name] * mask
-                y_masked = tf.stop_gradient(y[name]) * mask
-                loss = tf.losses.huber_loss(pred_masked, y_masked)
-                tf.summary.scalar('training_loss_' + name, loss)
-                losses.append(loss)
+                if comp[name]:
+                    mask = tf.reduce_max(action_one_hot['function'] * masks[name], axis=-1)
+                    pred_masked = pred[name] * mask
+                    y_masked = tf.stop_gradient(y[name]) * mask
+                    loss = tf.losses.huber_loss(pred_masked, y_masked)
+                    tf.summary.scalar('training_loss_' + name, loss)
+                    losses.append(loss)
             losses_sum = tf.add_n(losses, name='losses_sum')
             tf.summary.scalar('training_loss_total', losses_sum)
 
@@ -189,8 +200,9 @@ class Network:
 
         with tf.variable_scope('predict_summaries'):
             for name, q_vals in self._q.items():
-                action_q_val = tf.reduce_max(q_vals, name=name)
-                tf.summary.scalar('step_q_' + name, action_q_val)
+                if comp[name]:
+                    action_q_val = tf.reduce_max(q_vals, name=name)
+                    tf.summary.scalar('step_q_' + name, action_q_val)
         self._predict_summaries = tf.summary.merge_all(scope='predict_summaries')
 
         self.var_init = tf.global_variables_initializer()
@@ -214,20 +226,20 @@ class Network:
 
     def train_batch(self, sess, states, actions, rewards, next_states, not_terminal):
         batch = actions['function'].shape[0]
+        feed_dict = {
+            self._states: states['screen'],
+            self._actions['function']: actions['function'].reshape(batch),
+            self._rewards: rewards,
+            self._next_states: next_states['screen'],
+            self._not_terminal: not_terminal
+        }
+        for name, using in self._action_components.items():
+            if using:
+                feed_dict[name] = actions[name].reshape(batch)
+
         summary, _ = sess.run(
             [self._train_summaries, self._optimizer],
-            feed_dict={
-                self._states: states['screen'],
-                self._actions['function']: actions['function'].reshape(batch),
-                self._actions['screen']: actions['screen'].reshape(batch),
-                # self._actions['screen2']: actions['screen2'].reshape(batch),
-                self._actions['select_point_act']: actions['select_point_act'].reshape(batch),
-                self._actions['select_add']: actions['select_add'].reshape(batch),
-                # self._actions['queued']: actions['queued'].reshape(batch),
-                self._rewards: rewards,
-                self._next_states: next_states['screen'],
-                self._not_terminal: not_terminal
-            }
+            feed_dict=feed_dict
         )
 
         return summary

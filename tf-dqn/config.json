@@ -22,5 +22,22 @@
     "debug_logging": false,
     "log_frequency": 200,
 
-    "screen_size": 84
+    "environment_properties": {
+        "screen_size": 84,
+        "action_components": {
+            "screen": true,
+            "minimap": false,
+            "screen2": true,
+            "queued": true,
+            "control_group_act": false,
+            "control_group_id":false,
+            "select_point_act": true,
+            "select_add": true,
+            "select_unit_act": false,
+            "select_unit_id": false,
+            "select_worker":false,
+            "build_queue_id": false,
+            "unload_id": false
+        }
+    }
 }
