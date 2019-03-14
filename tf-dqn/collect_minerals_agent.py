@@ -79,7 +79,8 @@ class MineralsAgent(base_agent.BaseAgent):
                 if name == 'screen':
                     args.append([max(x - half_rect, 0), max(y - half_rect, 0)])
                 elif name == 'screen2':
-                    args.append([min(x + half_rect, config['screen_size'] - 1), min(y + half_rect, config['screen_size'] - 1)])
+                    s = config['environment_properties']['screen_size']
+                    args.append([min(x + half_rect, s - 1), min(y + half_rect, s - 1)])
             else:
                 if name == 'screen':
                     x, y = self.getScreenCoords(action['screen'])
@@ -96,8 +97,8 @@ class MineralsAgent(base_agent.BaseAgent):
         return actions.FunctionCall(id, args), True
 
     def getScreenCoords(self, val):
-        y = val // config['screen_size']
-        x = val % config['screen_size']
+        y = val // config['environment_properties']['screen_size']
+        x = val % config['environment_properties']['screen_size']
         return x, y
 
     def step(self, obs):

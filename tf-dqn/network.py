@@ -101,7 +101,9 @@ class Network:
         return logits
 
     def _define_model(self):
+        # action components we are using. Function is always included (for times when we iterate over action part names)
         comp = self._action_components
+        comp['function'] = True
 
         self._states = tf.placeholder(
             shape=[None, self._screen_size, self._screen_size, 5],
@@ -241,9 +243,10 @@ class Network:
             self._next_states: next_states['screen'],
             self._not_terminal: not_terminal
         }
+
         for name, using in self._action_components.items():
             if using:
-                feed_dict[name] = actions[name].reshape(batch)
+                feed_dict[self._actions[name]] = actions[name].reshape(batch)
 
         summary, _ = sess.run(
             [self._train_summaries, self._optimizer],
