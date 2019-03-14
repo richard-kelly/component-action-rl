@@ -174,10 +174,10 @@ class Network:
                 loss = tf.losses.huber_loss(pred_masked, y_masked)
                 tf.summary.scalar('training_loss_' + name, loss)
                 losses.append(loss)
-            losses_sum = tf.add_n(losses, name='losses_sum')
-            tf.summary.scalar('training_loss_total', losses_sum)
+            losses_avg = tf.reduce_mean(tf.stack(losses), name='losses_avg')
+            tf.summary.scalar('training_loss_avg', losses_avg)
 
-        self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(losses_sum)
+        self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(losses_avg)
 
         # tensorboard
         self._train_summaries = tf.summary.merge_all(scope='losses')
