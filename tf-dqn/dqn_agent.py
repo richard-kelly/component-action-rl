@@ -63,7 +63,7 @@ class DQNAgent:
                 self._update_epsilon(min(config['decay_steps'], self._steps))
                 print("Model restored at step: ", self._steps, ", epsilon: ", self._epsilon)
 
-            except ValueError:
+            except (ValueError, AttributeError):
                 # if the directory exists but there's no checkpoints, just continue
                 # usually because a test crashed immediately last time
                 self._sess.run(self._network.var_init)
