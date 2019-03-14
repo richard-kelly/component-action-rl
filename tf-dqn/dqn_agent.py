@@ -17,6 +17,7 @@ class DQNAgent:
         self._steps = 0
         self._episodes = 0
         self._episode_score = 0
+        self._memory_start_size_reached = False
         self._last_state = None
         self._last_reward = None
         self._last_action = None
@@ -75,7 +76,8 @@ class DQNAgent:
     def observe(self, terminal=False, reward=0):
         self._episode_score += reward
         if terminal:
-            summary = self._network.episode_summary(self._sess, self._episode_score)
+            epsilon = self._epsilon if self._memory_start_size_reached else 1.0
+            summary = self._network.episode_summary(self._sess, self._episode_score, epsilon)
             self._writer.add_summary(summary, self._steps)
             self._episode_score = 0
 
@@ -102,7 +104,8 @@ class DQNAgent:
                 self._network.update_target_q_net(self._sess)
 
             # do a batch of learning every "update_frequency" steps
-            if self._steps % config['update_frequency'] == 0 and self._memory.get_size() >= config['memory_burn_in']:
+            if self._steps % config['update_frequency'] == 0 and self._memory_start_size_reached:
+                # only start training once memory has reached minimum size
                 self._replay()
 
             # save checkpoint if needed
@@ -114,11 +117,14 @@ class DQNAgent:
                 )
                 print("Model saved in path: %s" % save_path)
 
-            if self._steps <= config['decay_steps']:
+            if self._steps <= config['decay_steps'] and self._memory_start_size_reached:
+                # only start changing epsilon once memory has reached minimum size
                 self._update_epsilon()
 
             self._last_state = state
             self._last_action = action
+
+            self._memory_start_size_reached = self._memory.get_size() >= config['memory_burn_in']
 
         return action
 
@@ -130,7 +136,7 @@ class DQNAgent:
 
     def _choose_action(self, state):
         action = {}
-        if random.random() < self._epsilon:
+        if not self._memory_start_size_reached or random.random() < self._epsilon:
             if self._sample_action is None:
                 # store one action to serve as action specification
                 _, self._sample_action = self._network.predict_one(self._sess, state)

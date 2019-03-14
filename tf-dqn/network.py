@@ -185,6 +185,8 @@ class Network:
         with tf.variable_scope('episode_summaries'):
             self._episode_score = tf.placeholder(shape=[], dtype=tf.float32, name='episode_score')
             tf.summary.scalar('episode_score', self._episode_score)
+            self._epsilon = tf.placeholder(shape=[], dtype=tf.float32, name='episode_ending_epsilon')
+            tf.summary.scalar('episode_ending_epsilon', self._epsilon)
         self._episode_summaries = tf.summary.merge_all(scope='episode_summaries')
 
         with tf.variable_scope('predict_summaries'):
@@ -200,8 +202,14 @@ class Network:
             keep_checkpoint_every_n_hours=self._checkpoint_hours
         )
 
-    def episode_summary(self, sess, score):
-        return sess.run(self._episode_summaries, feed_dict={self._episode_score: score})
+    def episode_summary(self, sess, score, epsilon):
+        return sess.run(
+            self._episode_summaries,
+            feed_dict={
+                self._episode_score: score,
+                self._epsilon: epsilon
+            }
+        )
 
     def update_target_q_net(self, sess):
         sess.run([v_t.assign(v) for v_t, v in zip(self._q_target_vars, self._q_vars)])
