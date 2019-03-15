@@ -117,7 +117,7 @@ class DQNAgent:
                 )
                 print("Model saved in path: %s" % save_path)
 
-            if self._steps <= config['decay_steps'] and self._memory_start_size_reached:
+            if self._steps <= config['decay_steps'] + config['memory_burn_in'] and self._memory_start_size_reached:
                 # only start changing epsilon once memory has reached minimum size
                 self._update_epsilon()
 
