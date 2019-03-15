@@ -97,8 +97,12 @@ class Network:
             select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act') if comp['select_point_act'] else None,
             select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add') if comp['select_add'] else None
         )
+        logits_filtered = {}
+        for name, val in logits.items():
+            if val is not None:
+                logits_filtered[name] = val
 
-        return logits
+        return logits_filtered
 
     def _define_model(self):
         # action components we are using. Function is always included (for times when we iterate over action part names)
@@ -149,21 +153,18 @@ class Network:
             # The prediction by the primary Q network for the actual actions
             pred = {}
             for name, q_vals in self._q.items():
-                if comp[name]:
-                    pred[name] = tf.reduce_sum(q_vals * action_one_hot[name], reduction_indices=-1, name=name)
+                pred[name] = tf.reduce_sum(q_vals * action_one_hot[name], reduction_indices=-1, name=name)
 
         with tf.variable_scope('optimization_target'):
             # The optimization target
             max_q_next_by_target = {}
             for name, q_vals in self._q_target.items():
-                if comp[name]:
-                    max_q_next_by_target[name] = tf.reduce_max(q_vals, axis=-1, name=name)
+                max_q_next_by_target[name] = tf.reduce_max(q_vals, axis=-1, name=name)
 
         with tf.variable_scope('y'):
             y = {}
             for name, max_q_next in max_q_next_by_target.items():
-                if comp[name]:
-                    y[name] = self._rewards + self._not_terminal * self._discount * max_q_next
+                y[name] = self._rewards + self._not_terminal * self._discount * max_q_next
 
         with tf.variable_scope('argument_masks'):
             # these would have to change for different pysc2 action functions...
@@ -180,13 +181,12 @@ class Network:
         with tf.variable_scope('losses'):
             losses = []
             for name in y.keys():
-                if comp[name]:
-                    mask = tf.reduce_max(action_one_hot['function'] * masks[name], axis=-1)
-                    pred_masked = pred[name] * mask
-                    y_masked = tf.stop_gradient(y[name]) * mask
-                    loss = tf.losses.huber_loss(pred_masked, y_masked)
-                    tf.summary.scalar('training_loss_' + name, loss)
-                    losses.append(loss)
+                mask = tf.reduce_max(action_one_hot['function'] * masks[name], axis=-1)
+                pred_masked = pred[name] * mask
+                y_masked = tf.stop_gradient(y[name]) * mask
+                loss = tf.losses.huber_loss(pred_masked, y_masked)
+                tf.summary.scalar('training_loss_' + name, loss)
+                losses.append(loss)
             losses_avg = tf.reduce_mean(tf.stack(losses), name='losses_avg')
             tf.summary.scalar('training_loss_avg', losses_avg)
 
@@ -204,9 +204,8 @@ class Network:
 
         with tf.variable_scope('predict_summaries'):
             for name, q_vals in self._q.items():
-                if comp[name]:
-                    action_q_val = tf.reduce_max(q_vals, name=name)
-                    tf.summary.scalar('step_q_' + name, action_q_val)
+                action_q_val = tf.reduce_max(q_vals, name=name)
+                tf.summary.scalar('step_q_' + name, action_q_val)
         self._predict_summaries = tf.summary.merge_all(scope='predict_summaries')
 
         self.var_init = tf.global_variables_initializer()
