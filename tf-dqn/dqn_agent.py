@@ -149,6 +149,7 @@ class DQNAgent:
             self._writer.add_summary(summary, self._steps)
             for name, q_values in pred.items():
                 if name == 'function':
+                    q_values = q_values.flatten()
                     valid = np.isin(config['env']['function_list'], state['available_actions'])
                     indices = np.nonzero(np.logical_not(valid))
                     q_values[indices] = np.nan
