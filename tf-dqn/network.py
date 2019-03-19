@@ -136,21 +136,12 @@ class Network:
             dtype=tf.float32,
             name='states_placeholder'
         )
-        with tf.variable_scope('action_placeholders'):
-            self._actions = dict(
-                function=tf.placeholder(shape=[None, ], dtype=tf.int32, name='function'),
-                screen=tf.placeholder(shape=[None, ], dtype=tf.int32, name='screen') if comp['screen'] else None,
-                screen2=tf.placeholder(shape=[None, ], dtype=tf.int32, name='screen2') if comp['screen2'] else None,
-                select_point_act=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_point_act') if comp['select_point_act'] else None,
-                select_add=tf.placeholder(shape=[None, ], dtype=tf.int32, name='select_add') if comp['select_add'] else None,
-                queued=tf.placeholder(shape=[None, ], dtype=tf.int32, name='queued') if comp['queued'] else None
-            )
-        self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
         self._next_states = tf.placeholder(
             shape=[None, self._screen_size, self._screen_size, 5],
             dtype=tf.float32,
             name='next_states_placeholder'
         )
+        self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
         self._not_terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='not_terminal_placeholder')
 
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
@@ -160,6 +151,12 @@ class Network:
 
         self._q_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_primary")
         self._q_target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_target")
+
+        with tf.variable_scope('action_placeholders'):
+            self._actions = {}
+            for name, val in self._q:
+                if val is not None:
+                    self._actions[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
 
         with tf.variable_scope('action_one_hot'):
             action_one_hot = dict(
@@ -183,7 +180,7 @@ class Network:
             for name, q_vals in self._q_target.items():
                 max_q_next_by_target[name] = tf.reduce_max(q_vals, axis=-1, name=name)
 
-        with tf.variable_scope('y'):
+        with tf.variable_scope( 'y'):
             y = {}
             for name, max_q_next in max_q_next_by_target.items():
                 y[name] = self._rewards + self._not_terminal * self._discount * max_q_next
