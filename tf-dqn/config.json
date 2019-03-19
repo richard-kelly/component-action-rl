@@ -27,6 +27,10 @@
 
     "environment_properties": {
         "screen_size": 84,
+        "minimap_size": 84,
+        "map_name": "MoveToBeacon",
+        "visualize": true,
+        "step_mul": 8,
         "action_components": {
             "screen": true,
             "minimap": false,
