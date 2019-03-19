@@ -47,6 +47,8 @@ class DQNAgent:
             config['discount'],
             config['model_checkpoint_max'],
             config['model_checkpoint_every_n_hours'],
+            config['reg_type'],
+            config['reg_scale'],
             config['environment_properties']
         )
         self._sess = tf.Session()

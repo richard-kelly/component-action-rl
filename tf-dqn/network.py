@@ -1,12 +1,26 @@
 import tensorflow as tf
 
 class Network:
-    def __init__(self, learning_rate, discount, max_checkpoints, checkpoint_hours, environment_properties):
+    def __init__(
+            self,
+            learning_rate,
+            discount,
+            max_checkpoints,
+            checkpoint_hours,
+            reg_type,
+            reg_scale,
+            environment_properties
+    ):
 
         self._learning_rate = learning_rate
         self._discount = discount
         self._max_checkpoints = max_checkpoints
         self._checkpoint_hours = checkpoint_hours
+
+        if reg_type == 'l1':
+            self._regularizer = tf.contrib.layers.l1_regularizer(scale=reg_scale)
+        elif reg_type == 'l2':
+            self._regularizer = tf.contrib.layers.l2_regularizer(scale=reg_scale)
 
         self._screen_size = environment_properties['screen_size']
         self._action_components = environment_properties['action_components']
@@ -62,10 +76,18 @@ class Network:
         )
         fc_non_spatial = tf.layers.dense(
             non_spatial_flat,
-            512,
+            1024,
             activation=tf.nn.relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
             name='fc_1'
+        )
+
+        fc_non_spatial2 = tf.layers.dense(
+            fc_non_spatial,
+            1024,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
+            name='fc_2'
         )
 
         spatial_policy_1 = tf.layers.conv2d(
@@ -90,7 +112,7 @@ class Network:
 
         n = self._screen_size
         logits = dict(
-            function=tf.layers.dense(fc_non_spatial, 4, name='function'),
+            function=tf.layers.dense(fc_non_spatial2, 4, name='function'),
             screen=tf.reshape(spatial_policy_1, [-1, n * n], name='screen') if comp['screen'] else None,
             screen2=tf.reshape(spatial_policy_2, [-1, n * n], name='screen2') if comp['screen2'] else None,
             queued=tf.layers.dense(fc_non_spatial, 2, name='queued') if comp['queued'] else None,
@@ -131,7 +153,7 @@ class Network:
         )
         self._not_terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='not_terminal_placeholder')
 
-        with tf.variable_scope('Q_primary'):
+        with tf.variable_scope('Q_primary', regularizer=self._regularizer):
             self._q = self._get_network(self._states)
         with tf.variable_scope('Q_target'):
             self._q_target = self._get_network(self._next_states)
@@ -188,9 +210,13 @@ class Network:
                 tf.summary.scalar('training_loss_' + name, loss)
                 losses.append(loss)
             losses_avg = tf.reduce_mean(tf.stack(losses), name='losses_avg')
+            reg_loss = tf.losses.get_regularization_loss()
+            final_loss = losses_avg + reg_loss
             tf.summary.scalar('training_loss_avg', losses_avg)
+            tf.summary.scalar('training_loss_reg', reg_loss)
+            tf.summary.scalar('training_loss_final', final_loss)
 
-        self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(losses_avg)
+        self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(final_loss)
 
         # tensorboard
         self._train_summaries = tf.summary.merge_all(scope='losses')

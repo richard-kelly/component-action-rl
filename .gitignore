@@ -7,3 +7,4 @@ smac/__pycache__/
 smac/models/
 examples/
 tf-dqn/old_runs/
+tf-dqn/old_models/

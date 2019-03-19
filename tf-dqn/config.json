@@ -7,8 +7,11 @@
     "model_checkpoint_every_n_hours": 24,
 
     "discount": 0.99,
-    "learning_rate": 0.001,
+    "learning_rate": 0.0001,
     "batch_size": 32,
+    "reg_type": "l1",
+    "reg_scale": 0.001,
+
     "update_frequency": 4,
     "memory_size": 25000,
     "memory_burn_in": 10000,
@@ -28,7 +31,7 @@
             "screen": true,
             "minimap": false,
             "screen2": true,
-            "queued": true,
+            "queued": false,
             "control_group_act": false,
             "control_group_id":false,
             "select_point_act": true,
