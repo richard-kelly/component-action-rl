@@ -21,12 +21,12 @@ FLAGS(sys.argv)
 
 FUNCTIONS = actions.FUNCTIONS
 
-# masking the actions functions so only these actions can be taken
-relevant_actions = [0, 2, 3, 331]
-
 # load configuration
 with open('config.json', 'r') as fp:
     config = json.load(fp=fp)
+
+# masking the actions functions so only these actions can be taken
+relevant_actions = config['env']['function_list']
 
 # save a copy of the configuration files being used for a run in the run's folder (first time only)
 restore = True
@@ -56,7 +56,7 @@ def get_action_function(obs, action):
             if name == 'screen':
                 args.append([max(x - half_rect, 0), max(y - half_rect, 0)])
             elif name == 'screen2':
-                s = config['environment_properties']['screen_size']
+                s = config['env']['screen_size']
                 args.append([min(x + half_rect, s - 1), min(y + half_rect, s - 1)])
         else:
             if name == 'screen':
@@ -74,8 +74,8 @@ def get_action_function(obs, action):
 
 
 def get_screen_coords(val):
-    y = val // config['environment_properties']['screen_size']
-    x = val % config['environment_properties']['screen_size']
+    y = val // config['env']['screen_size']
+    x = val % config['env']['screen_size']
     return x, y
 
 
@@ -87,9 +87,9 @@ def preprocess_state(obs):
         (obs.observation['feature_screen'].selected, 1)
     )
 
-    # avail_actions = np.zeros(len(FUNCTIONS))
-    # avail_actions[obs.observation['available_actions']] = 1
-    # state['available_actions'] = avail_actions
+    avail_actions = np.zeros(len(FUNCTIONS))
+    avail_actions[obs.observation['available_actions']] = 1
+    state['available_actions'] = avail_actions
 
     return state
 
@@ -97,17 +97,14 @@ def preprocess_state(obs):
 def main():
     agent = MineralsAgent()
 
-    screen = config['environment_properties']['screen_size']
-    minimap = config['environment_properties']['minimap_size']
-
     with sc2_env.SC2Env(
-        map_name=config['environment_properties']['map_name'],
+        map_name=config['env']['map_name'],
         players=[sc2_env.Agent(sc2_env.Race['random'], None)],
         agent_interface_format=features.AgentInterfaceFormat(
-            feature_dimensions=features.Dimensions(screen, minimap)
+            feature_dimensions=features.Dimensions(config['env']['screen_size'], config['env']['minimap_size'])
         ),
-        visualize=config['environment_properties']['visualize'],
-        step_mul=config['environment_properties']['step_mul']
+        visualize=config['env']['visualize'],
+        step_mul=config['env']['step_mul']
     ) as env:
         agent.reset()
         agent.setup(env.observation_spec(), env.action_spec())

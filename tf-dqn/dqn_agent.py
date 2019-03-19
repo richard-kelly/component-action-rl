@@ -49,7 +49,7 @@ class DQNAgent:
             config['model_checkpoint_every_n_hours'],
             config['reg_type'],
             config['reg_scale'],
-            config['environment_properties']
+            config['env']
         )
         self._sess = tf.Session()
         self._writer = tf.summary.FileWriter(config['model_dir'], self._sess.graph)
@@ -148,7 +148,11 @@ class DQNAgent:
             summary, pred = self._network.predict_one(self._sess, state)
             self._writer.add_summary(summary, self._steps)
             for name, q_values in pred.items():
-                action[name] = np.argmax(q_values)
+                if name == 'function':
+                    valid = np.isin(config['env']['function_list'], state['available_actions'])
+                    indices = np.nonzero(np.logical_not(valid))
+                    q_values[indices] = np.nan
+                action[name] = np.nanargmax(q_values)
         return action
 
     def _replay(self):

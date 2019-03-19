@@ -25,12 +25,13 @@
     "debug_logging": false,
     "log_frequency": 200,
 
-    "environment_properties": {
+    "env": {
         "screen_size": 84,
         "minimap_size": 84,
         "map_name": "MoveToBeacon",
         "visualize": true,
         "step_mul": 8,
+        "function_list": [0, 2, 3, 331],
         "action_components": {
             "screen": true,
             "minimap": false,
