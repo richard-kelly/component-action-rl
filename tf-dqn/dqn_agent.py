@@ -92,8 +92,8 @@ class DQNAgent:
                 self._last_state = None
                 self._episodes += 1
 
-    def act(self, state):
-        action = self._choose_action(state)
+    def act(self, state, available_actions=None):
+        action = self._choose_action(state, available_actions)
         self._steps += 1
 
         if not config['run_model_no_training']:
@@ -136,13 +136,15 @@ class DQNAgent:
         elif config['decay_type'] == "linear":
             self._epsilon = self._epsilon - (self._decay * steps)
 
-    def _choose_action(self, state):
+    def _choose_action(self, state, available_actions):
         action = {}
         if not self._memory_start_size_reached or random.random() < self._epsilon:
             if self._sample_action is None:
                 # store one action to serve as action specification
                 _, self._sample_action = self._network.predict_one(self._sess, state)
             for name, logits in self._sample_action.items():
+                if available_actions and name in available_actions:
+
                 action[name] = random.randint(0, logits.shape[1] - 1)
         else:
             summary, pred = self._network.predict_one(self._sess, state)

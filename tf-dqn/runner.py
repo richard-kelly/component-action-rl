@@ -80,13 +80,13 @@ def get_screen_coords(val):
 
 
 def preprocess_state(obs):
-    avail_actions = np.zeros(len(FUNCTIONS))
-    avail_actions[obs.observation['available_actions']] = 1
+    # avail_actions = np.zeros(len(FUNCTIONS))
+    # avail_actions[obs.observation['available_actions']] = 1
 
     state = dict(
         screen_player_relative=obs.observation['feature_screen'].player_relative,
         screen_selected=obs.observation['feature_screen'].selected,
-        available_actions=avail_actions
+        # available_actions=avail_actions
     )
     return state
 
@@ -121,13 +121,16 @@ class MineralsAgent(base_agent.BaseAgent):
     def step(self, obs):
         super().step(obs)
         state = preprocess_state(obs)
+        available_actions = dict(
+            function=obs.observation['available_actions']
+        )
 
         terminal = True if obs.step_type is StepType.LAST else False
 
         if self.steps > 1:
             self.rl_agent.observe(terminal=terminal, reward=obs.reward)
 
-        action = self.rl_agent.act(state)
+        action = self.rl_agent.act(state, available_actions)
 
         action_for_sc = get_action_function(obs, action)
 
