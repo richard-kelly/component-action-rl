@@ -42,8 +42,19 @@ class Network:
         self._define_model()
 
     def _get_network(self, inputs):
+        screen_player_relative_one_hot = tf.contrib.layers.one_hot_encoding(
+            labels=inputs['screen_player_relative'],
+            num_classes=5
+        )[:, :, :, 1:]
+
+        screen_selected_one_hot = tf.contrib.layers.one_hot_encoding(
+            labels=inputs['screen_player_relative'],
+            num_classes=2
+        )[:, :, :, 1:]
+        screen = tf.concat([screen_player_relative_one_hot, screen_selected_one_hot], axis=-1, name='screen_input')
+
         conv1_spatial = tf.layers.conv2d(
-            inputs=inputs,
+            inputs=screen,
             filters=16,
             kernel_size=5,
             padding='same',
@@ -126,21 +137,29 @@ class Network:
 
         return logits_filtered
 
+    def _get_state_placeholder(self):
+        return dict(
+                screen_player_relative=tf.placeholder(
+                    shape=[None, self._screen_size, self._screen_size],
+                    dtype=tf.int32,
+                    name='screen_player_relative'
+                ),
+                screen_selected=tf.placeholder(
+                    shape=[None, self._screen_size, self._screen_size],
+                    dtype=tf.int32,
+                    name='screen_selected'
+                )
+            )
+
     def _define_model(self):
         # action components we are using. Function is always included (for times when we iterate over action part names)
         comp = self._action_components
         comp['function'] = True
 
-        self._states = tf.placeholder(
-            shape=[None, self._screen_size, self._screen_size, 5],
-            dtype=tf.float32,
-            name='states_placeholder'
-        )
-        self._next_states = tf.placeholder(
-            shape=[None, self._screen_size, self._screen_size, 5],
-            dtype=tf.float32,
-            name='next_states_placeholder'
-        )
+        with tf.variable_scope('states_placeholders'):
+            self._states = self._get_state_placeholder()
+        with tf.variable_scope('next_states_placeholders'):
+            self._next_states = self._get_state_placeholder()
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
         self._not_terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='not_terminal_placeholder')
 
@@ -154,7 +173,7 @@ class Network:
 
         with tf.variable_scope('action_placeholders'):
             self._actions = {}
-            for name, val in self._q:
+            for name, val in self._q.items():
                 if val is not None:
                     self._actions[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
 
@@ -251,29 +270,28 @@ class Network:
         sess.run([v_t.assign(v) for v_t, v in zip(self._q_target_vars, self._q_vars)])
 
     def predict_one(self, sess, state):
-        return sess.run(
-            [self._predict_summaries, self._q],
-            feed_dict={self._states: state['screen'].reshape(1, self._screen_size, self._screen_size, 5)}
-        )
+        feed_dict = {}
+        for name, _ in self._states.items():
+            feed_dict[self._states[name]] = state[name].reshape(1, self._screen_size, self._screen_size)
+        return sess.run([self._predict_summaries, self._q], feed_dict=feed_dict)
 
     def train_batch(self, sess, states, actions, rewards, next_states, not_terminal):
         batch = actions['function'].shape[0]
         feed_dict = {
-            self._states: states['screen'],
             self._actions['function']: actions['function'].reshape(batch),
             self._rewards: rewards,
-            self._next_states: next_states['screen'],
             self._not_terminal: not_terminal
         }
+
+        for name, _ in self._states.items():
+            feed_dict[self._states[name]] = states[name]
+            feed_dict[self._next_states[name]] = next_states[name]
 
         for name, using in self._action_components.items():
             if using:
                 feed_dict[self._actions[name]] = actions[name].reshape(batch)
 
-        summary, _ = sess.run(
-            [self._train_summaries, self._optimizer],
-            feed_dict=feed_dict
-        )
+        summary, _ = sess.run([self._train_summaries, self._optimizer], feed_dict=feed_dict)
 
         return summary
 

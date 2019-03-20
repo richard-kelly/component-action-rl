@@ -80,17 +80,14 @@ def get_screen_coords(val):
 
 
 def preprocess_state(obs):
-    state = dict()
-
-    state['screen'] = utils.one_hot_encode_int_arrays(
-        (obs.observation['feature_screen'].player_relative, 4),
-        (obs.observation['feature_screen'].selected, 1)
-    )
-
     avail_actions = np.zeros(len(FUNCTIONS))
     avail_actions[obs.observation['available_actions']] = 1
-    state['available_actions'] = avail_actions
 
+    state = dict(
+        screen_player_relative=obs.observation['feature_screen'].player_relative,
+        screen_selected=obs.observation['feature_screen'].selected,
+        available_actions=avail_actions
+    )
     return state
 
 
