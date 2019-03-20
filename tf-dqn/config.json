@@ -31,7 +31,9 @@
         "map_name": "MoveToBeacon",
         "visualize": true,
         "step_mul": 8,
-        "function_list": [0, 2, 3, 331],
+        "action_list": {
+            "function": [0, 2, 3, 331]
+        },
         "action_components": {
             "screen": true,
             "minimap": false,

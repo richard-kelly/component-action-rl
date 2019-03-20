@@ -26,7 +26,7 @@ with open('config.json', 'r') as fp:
     config = json.load(fp=fp)
 
 # masking the actions functions so only these actions can be taken
-relevant_actions = config['env']['function_list']
+relevant_actions = config['env']['action_list']['function']
 
 # save a copy of the configuration files being used for a run in the run's folder (first time only)
 restore = True
@@ -42,7 +42,8 @@ def get_action_function(obs, action):
     id = relevant_actions[action['function']]
 
     if id not in obs.observation['available_actions']:
-        # no_op
+        # no_op - should not happen
+        print("Action returned by RL agent is not available. Doing no_op.")
         return actions.FunctionCall(0, [])
 
     args = []
@@ -132,9 +133,7 @@ class MineralsAgent(base_agent.BaseAgent):
 
         action = self.rl_agent.act(state, available_actions)
 
-        action_for_sc = get_action_function(obs, action)
-
-        return action_for_sc
+        return get_action_function(obs, action)
 
 
 if __name__ == "__main__":

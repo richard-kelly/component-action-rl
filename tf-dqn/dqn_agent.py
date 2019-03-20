@@ -142,17 +142,27 @@ class DQNAgent:
             if self._sample_action is None:
                 # store one action to serve as action specification
                 _, self._sample_action = self._network.predict_one(self._sess, state)
-            for name, logits in self._sample_action.items():
+            for name, q_values in self._sample_action.items():
                 if available_actions and name in available_actions:
-
-                action[name] = random.randint(0, logits.shape[1] - 1)
+                    if name in config['env']['action_list']:
+                        valid = np.in1d(config['env']['action_list'][name], available_actions[name])
+                        options = np.nonzero(valid)[0]
+                        action[name] = np.random.choice(options)
+                    else:
+                        action[name] = np.random.choice(available_actions[name])
+                else:
+                    action[name] = random.randint(0, q_values.shape[1] - 1)
         else:
             summary, pred = self._network.predict_one(self._sess, state)
             self._writer.add_summary(summary, self._steps)
             for name, q_values in pred.items():
-                if name == 'function':
+                if available_actions and name in available_actions:
                     q_values = q_values.flatten()
-                    valid = np.isin(config['env']['function_list'], state['available_actions'])
+                    if name in config['env']['action_list']:
+                        valid = np.in1d(config['env']['action_list'][name], available_actions[name])
+                    else:
+                        valid = np.zeros(q_values.shape, dtype=np.int32)
+                        valid[available_actions[name]] = 1
                     indices = np.nonzero(np.logical_not(valid))
                     q_values[indices] = np.nan
                 action[name] = np.nanargmax(q_values)
