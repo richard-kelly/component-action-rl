@@ -6,7 +6,6 @@ import sys
 
 from absl import flags
 
-from pysc2.agents import base_agent
 from pysc2.lib import actions
 from pysc2.env.environment import StepType
 from pysc2.env import sc2_env
@@ -93,8 +92,6 @@ def preprocess_state(obs):
 
 
 def main():
-    agent = MineralsAgent()
-
     with sc2_env.SC2Env(
         map_name=config['env']['map_name'],
         players=[sc2_env.Agent(sc2_env.Race['random'], None)],
@@ -104,36 +101,32 @@ def main():
         visualize=config['env']['visualize'],
         step_mul=config['env']['step_mul']
     ) as env:
-        agent.reset()
-        agent.setup(env.observation_spec(), env.action_spec())
-        obs = env.reset()
-        for _ in range(1000000):
-            obs = env.step([agent.step(obs[0])])
+        rl_agent = DQNAgent(restore)
+        obs = env.reset()[0]
+        step = 0
+        episode = 1
+        episode_reward = 0
+        while step <= 1000000:
+            step += 1
+            state = preprocess_state(obs)
+            available_actions = dict(
+                function=obs.observation['available_actions']
+            )
 
+            episode_reward += obs.reward
+            if obs.step_type is StepType.LAST:
+                terminal = True
+                print("Episode", episode, "finished. Score:", episode_reward)
+                episode_reward = 0
+                episode += 1
+            else:
+                terminal = False
 
-class MineralsAgent(base_agent.BaseAgent):
-    def __init__(self):
-        super().__init__()
-        self.rl_agent = DQNAgent(restore)
+            if step > 1:
+                rl_agent.observe(terminal=terminal, reward=obs.reward)
 
-    def setup(self, obs_spec, action_spec):
-        super().setup(obs_spec, action_spec)
-
-    def step(self, obs):
-        super().step(obs)
-        state = preprocess_state(obs)
-        available_actions = dict(
-            function=obs.observation['available_actions']
-        )
-
-        terminal = True if obs.step_type is StepType.LAST else False
-
-        if self.steps > 1:
-            self.rl_agent.observe(terminal=terminal, reward=obs.reward)
-
-        action = self.rl_agent.act(state, available_actions)
-
-        return get_action_function(obs, action)
+            action = rl_agent.act(state, available_actions)
+            obs = env.step([get_action_function(obs, action)])[0]
 
 
 if __name__ == "__main__":
