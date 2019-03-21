@@ -152,8 +152,11 @@ def main():
         base_name = config['model_dir']
         while True:
             name = ''
-            for param in batch['random']:
+            for param in batch['log_random']:
                 config[param] = utils.log_uniform(batch['random'][param]['min'], batch['random'][param]['max'])
+                name += '_' + param + '_' + '{:.2e}'.format(config[param])
+            for param in batch['random']:
+                config[param] = random.uniform(batch['random'][param]['min'], batch['random'][param]['max'])
                 name += '_' + param + '_' + '{:.2e}'.format(config[param])
             config['model_dir'] = base_name + '/' + name
             print('****** Starting a new run in this batch: ' + name + ' ******')
