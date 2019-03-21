@@ -1,5 +1,6 @@
 import numpy as np
-
+import random
+import math
 
 def one_hot_encode_int_array(array, num_cats):
     shape = tuple(list(array.shape) + [num_cats])
@@ -25,6 +26,10 @@ def one_hot_encode_int_arrays(*args):
             one_hot[..., layer] = np.where(arg[0] == i, 1, 0)
             layer += 1
     return one_hot
+
+
+def log_uniform(a, b, base=10):
+    return a ** ((((math.log(b, base) / math.log(a, base)) - 1) * random.random()) + 1)
 
 
 def main():
