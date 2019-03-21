@@ -1,8 +1,9 @@
 import numpy as np
 import json
 import os
-import shutil
 import sys
+import datetime
+import random
 import tensorflow as tf
 
 from absl import flags
@@ -76,13 +77,20 @@ def preprocess_state(obs):
     return state
 
 
-def run_one_env(config, rename_if_duplicate):
+def run_one_env(config, rename_if_duplicate=False):
     # save a copy of the configuration file being used for a run in the run's folder (first time only)
     restore = True
     if not os.path.exists(config['model_dir']):
         restore = False
         os.makedirs(config['model_dir'])
-        shutil.copy2('config.json', config['model_dir'])
+        with open(config['model_dir'] + '/config.json', 'w+') as fp:
+            fp.write(json.dumps(config, indent=4))
+    elif rename_if_duplicate:
+        restore = False
+        time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        os.makedirs(config['model_dir'] + '_' + time)
+        with open(config['model_dir'] + '_' + time + '/config.json', 'w+') as fp:
+            fp.write(json.dumps(config, indent=4))
 
     with sc2_env.SC2Env(
             map_name=config['env']['map_name'],
@@ -93,6 +101,7 @@ def run_one_env(config, rename_if_duplicate):
             visualize=config['env']['visualize'],
             step_mul=config['env']['step_mul']
     ) as env:
+        tf.reset_default_graph()
         with tf.Session() as sess:
             rl_agent = DQNAgent(sess, config, restore)
             # observations from the env are tuples of 1 Timestep per player
@@ -129,10 +138,29 @@ def run_one_env(config, rename_if_duplicate):
                 # actions passed into env.step() are in a list with one action per player
                 obs = env.step([action_for_sc])[0]
 
+
 def main():
+
     # load configuration
     with open('config.json', 'r') as fp:
         config = json.load(fp=fp)
+
+    # load batch config file
+    with open('batch.json', 'r') as fp:
+        batch = json.load(fp=fp)
+
+    if batch['use']:
+        base_name = config['model_dir']
+        while True:
+            name = ''
+            for param in batch['random']:
+                config[param] = random.uniform(batch['random'][param]['min'], batch['random'][param]['max'])
+                name += '_' + param + '_' + '{:.2e}'.format(config[param])
+            config['model_dir'] = base_name + '/' + name
+            print('****** Starting a new run in this batch: ' + name + ' ******')
+            run_one_env(config, rename_if_duplicate=True)
+    else:
+        run_one_env(config, rename_if_duplicate=False)
 
 
 if __name__ == "__main__":

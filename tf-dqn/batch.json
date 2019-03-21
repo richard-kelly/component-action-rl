@@ -1,0 +1,13 @@
+{
+    "use": true,
+    "random": {
+        "learning_rate": {
+            "min": 1e-6,
+            "max": 1e-2
+        },
+        "reg_scale": {
+            "min": 1e-6,
+            "max": 1e-2
+        }
+    }
+}

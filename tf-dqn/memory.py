@@ -1,6 +1,7 @@
 import random
 import numpy as np
 
+
 class Memory:
     """Latest replay memory."""
 

@@ -5,6 +5,8 @@
     "model_checkpoint_frequency": 20000,
     "model_checkpoint_max": 2,
     "model_checkpoint_every_n_hours": 24,
+    "max_steps": 120000,
+    "max_episodes": 0,
 
     "discount": 0.99,
     "learning_rate": 0.0001,
