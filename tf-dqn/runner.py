@@ -153,7 +153,7 @@ def main():
         while True:
             name = ''
             for param in batch['log_random']:
-                config[param] = utils.log_uniform(batch['random'][param]['min'], batch['random'][param]['max'])
+                config[param] = utils.log_uniform(batch['log_random'][param]['min'], batch['log_random'][param]['max'])
                 name += '_' + param + '_' + '{:.2e}'.format(config[param])
             for param in batch['random']:
                 config[param] = random.uniform(batch['random'][param]['min'], batch['random'][param]['max'])
