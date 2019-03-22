@@ -77,7 +77,7 @@ def preprocess_state(obs):
     return state
 
 
-def run_one_env(config, rename_if_duplicate=False):
+def run_one_env(config, rename_if_duplicate=False, output_file=None):
     # save a copy of the configuration file being used for a run in the run's folder (first time only)
     restore = True
     if not os.path.exists(config['model_dir']):
@@ -91,6 +91,9 @@ def run_one_env(config, rename_if_duplicate=False):
         os.makedirs(config['model_dir'] + '_' + time)
         with open(config['model_dir'] + '_' + time + '/config.json', 'w+') as fp:
             fp.write(json.dumps(config, indent=4))
+
+    max_ep_score = None
+    last_10_ep_score = []
 
     with sc2_env.SC2Env(
             map_name=config['env']['map_name'],
@@ -120,6 +123,11 @@ def run_one_env(config, rename_if_duplicate=False):
                 if obs.step_type is StepType.LAST:
                     terminal = True
                     print("Episode", episode, "finished. Score:", episode_reward)
+                    if len(last_10_ep_score) == 10:
+                        last_10_ep_score.pop(0)
+                    last_10_ep_score.append(episode_reward)
+                    if max_ep_score is None or episode_reward > max_ep_score:
+                        max_ep_score = episode_reward
                     episode_reward = 0
                     episode += 1
                 else:
@@ -138,6 +146,10 @@ def run_one_env(config, rename_if_duplicate=False):
                 # actions passed into env.step() are in a list with one action per player
                 obs = env.step([action_for_sc])[0]
 
+    if output_file:
+        with open(output_file, 'a+') as f:
+            avg = sum(last_10_ep_score) / 10
+            f.write(config['model_dir'] + ' ' + str(max_ep_score) + ' ' + str(avg) + '\n')
 
 def main():
     # load configuration
@@ -153,14 +165,14 @@ def main():
         while True:
             name = ''
             for param in batch['log_random']:
-                config[param] = utils.log_uniform(batch['random'][param]['min'], batch['random'][param]['max'])
+                config[param] = utils.log_uniform(batch['log_random'][param]['min'], batch['log_random'][param]['max'])
                 name += '_' + param + '_' + '{:.2e}'.format(config[param])
             for param in batch['random']:
                 config[param] = random.uniform(batch['random'][param]['min'], batch['random'][param]['max'])
                 name += '_' + param + '_' + '{:.2e}'.format(config[param])
             config['model_dir'] = base_name + '/' + name
             print('****** Starting a new run in this batch: ' + name + ' ******')
-            run_one_env(config, rename_if_duplicate=True)
+            run_one_env(config, rename_if_duplicate=True, output_file=base_name + '/batch_summary.txt')
     else:
         run_one_env(config, rename_if_duplicate=False)
 
