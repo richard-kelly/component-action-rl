@@ -39,7 +39,7 @@ def get_action_function(obs, action, actions_in_use, screen_size):
         # just select a rectangle around the point given by 'screen'
         if id == 3 and (name == 'screen' or name == 'screen2') and 'screen2' not in action:
             half_rect = 5
-            x, y = get_screen_coords(action['screen'])
+            x, y = get_screen_coords(action['screen'], screen_size)
             if name == 'screen':
                 args.append([max(x - half_rect, 0), max(y - half_rect, 0)])
             elif name == 'screen2':
