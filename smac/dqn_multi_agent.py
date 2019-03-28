@@ -5,8 +5,8 @@ import random
 import json
 import time
 
-from network import Network
-from memory import Memory
+from pysc2_network import Network
+from latest_replay_mem import Memory
 
 with open('config.json', 'r') as fp:
     config = json.load(fp=fp)

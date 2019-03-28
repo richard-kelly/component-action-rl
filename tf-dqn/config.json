@@ -50,6 +50,7 @@
             "select_worker":false,
             "build_queue_id": false,
             "unload_id": false
-        }
+        },
+        "select_rect_half_size": 20
     }
 }

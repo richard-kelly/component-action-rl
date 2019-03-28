@@ -4,8 +4,8 @@ import math
 import random
 import time
 
-from network import Network
-from memory import Memory
+from pysc2_network import SC2Network
+from latest_replay_mem import LatestReplayMemory
 
 
 class DQNAgent:
@@ -38,8 +38,8 @@ class DQNAgent:
         else:
             self._decay = 0.0
 
-        self._memory = Memory(self._config['memory_size'])
-        self._network = Network(
+        self._memory = LatestReplayMemory(self._config['memory_size'])
+        self._network = SC2Network(
             self._config['learning_rate'],
             self._config['discount'],
             self._config['model_checkpoint_max'],

@@ -1,8 +1,7 @@
-import random
 import numpy as np
 
 
-class Memory:
+class LatestReplayMemory:
     """Latest replay memory."""
 
     def __init__(self, max_steps):

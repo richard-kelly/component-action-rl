@@ -21,7 +21,7 @@ FLAGS = flags.FLAGS
 FLAGS(sys.argv)
 
 
-def get_action_function(obs, action, actions_in_use, screen_size):
+def get_action_function(obs, action, actions_in_use, screen_size, half_rect=20):
     # id = action['function']
     # Masked actions instead
     id = actions_in_use[action['function']]
@@ -38,7 +38,6 @@ def get_action_function(obs, action, actions_in_use, screen_size):
         # special case of func id 3, select_rect, used only if 'screen2' isn't output by network
         # just select a rectangle around the point given by 'screen'
         if id == 3 and (name == 'screen' or name == 'screen2') and 'screen2' not in action:
-            half_rect = 5
             x, y = get_screen_coords(action['screen'])
             if name == 'screen':
                 args.append([max(x - half_rect, 0), max(y - half_rect, 0)])
@@ -141,7 +140,8 @@ def run_one_env(config, rename_if_duplicate=False, output_file=None):
                     obs,
                     action,
                     config['env']['action_list']['function'],
-                    config['env']['screen_size']
+                    config['env']['screen_size'],
+                    half_rect=config['env']['select_rect_half_size']
                 )
                 # actions passed into env.step() are in a list with one action per player
                 obs = env.step([action_for_sc])[0]
@@ -150,6 +150,7 @@ def run_one_env(config, rename_if_duplicate=False, output_file=None):
         with open(output_file, 'a+') as f:
             avg = sum(last_10_ep_score) / 10
             f.write(config['model_dir'] + ' ' + str(max_ep_score) + ' ' + str(avg) + '\n')
+
 
 def main():
     # load configuration

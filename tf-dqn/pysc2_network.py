@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-class Network:
+
+class SC2Network:
     def __init__(
             self,
             learning_rate,
