@@ -38,7 +38,7 @@ def get_action_function(obs, action, actions_in_use, screen_size, half_rect=20):
         # special case of func id 3, select_rect, used only if 'screen2' isn't output by network
         # just select a rectangle around the point given by 'screen'
         if id == 3 and (name == 'screen' or name == 'screen2') and 'screen2' not in action:
-            x, y = get_screen_coords(action['screen'])
+            x, y = get_screen_coords(action['screen'], screen_size)
             if name == 'screen':
                 args.append([max(x - half_rect, 0), max(y - half_rect, 0)])
             elif name == 'screen2':
@@ -81,14 +81,13 @@ def run_one_env(config, rename_if_duplicate=False, output_file=None):
     restore = True
     if not os.path.exists(config['model_dir']):
         restore = False
-        os.makedirs(config['model_dir'])
-        with open(config['model_dir'] + '/config.json', 'w+') as fp:
-            fp.write(json.dumps(config, indent=4))
     elif rename_if_duplicate:
         restore = False
         time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        os.makedirs(config['model_dir'] + '_' + time)
-        with open(config['model_dir'] + '_' + time + '/config.json', 'w+') as fp:
+        config['model_dir'] = config['model_dir'] + '_' + time
+    if not restore:
+        os.makedirs(config['model_dir'])
+        with open(config['model_dir'] + '/config.json', 'w+') as fp:
             fp.write(json.dumps(config, indent=4))
 
     max_ep_score = None
@@ -163,8 +162,10 @@ def main():
 
     if batch['use']:
         base_name = config['model_dir']
+        count = 0
         while True:
-            name = ''
+            count += 1
+            name = str(count)
             for param in batch['log_random']:
                 config[param] = utils.log_uniform(batch['log_random'][param]['min'], batch['log_random'][param]['max'])
                 name += '_' + param + '_' + '{:.2e}'.format(config[param])
