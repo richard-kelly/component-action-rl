@@ -153,7 +153,7 @@ def run_one_env(config, rename_if_duplicate=False, output_file=None):
 
 def main():
     # load configuration
-    with open('config.json', 'r') as fp:
+    with open('pysc2_config.json', 'r') as fp:
         config = json.load(fp=fp)
 
     # load batch config file
