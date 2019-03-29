@@ -8,3 +8,4 @@ smac/models/
 examples/
 tf-dqn/old_runs/
 tf-dqn/old_models/
+tf-dqn/tests/

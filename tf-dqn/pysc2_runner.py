@@ -24,20 +24,20 @@ FLAGS(sys.argv)
 def get_action_function(obs, action, actions_in_use, screen_size, half_rect=20):
     # id = action['function']
     # Masked actions instead
-    id = actions_in_use[action['function']]
+    func_id = actions_in_use[action['function']]
 
-    if id not in obs.observation['available_actions']:
-        # no_op - should not happen
+    if func_id not in obs.observation['available_actions']:
+        # no_op because of bad action - should not happen
         print("Action returned by RL agent is not available. Doing no_op.")
         return actions.FunctionCall(0, [])
 
     args = []
     pysc2_funcs = actions.FUNCTIONS
-    for i in range(len(pysc2_funcs[id].args)):
-        name = pysc2_funcs[id].args[i].name
-        # special case of func id 3, select_rect, used only if 'screen2' isn't output by network
+    for i in range(len(pysc2_funcs[func_id].args)):
+        name = pysc2_funcs[func_id].args[i].name
+        # special case of func_id 3, select_rect, used only if 'screen2' isn't output by network
         # just select a rectangle around the point given by 'screen'
-        if id == 3 and (name == 'screen' or name == 'screen2') and 'screen2' not in action:
+        if func_id == 3 and (name == 'screen' or name == 'screen2') and 'screen2' not in action:
             x, y = get_screen_coords(action['screen'], screen_size)
             if name == 'screen':
                 args.append([max(x - half_rect, 0), max(y - half_rect, 0)])
@@ -55,7 +55,7 @@ def get_action_function(obs, action, actions_in_use, screen_size, half_rect=20):
                 args.append([0])
             else:
                 args.append([action[name]])
-    return actions.FunctionCall(id, args)
+    return actions.FunctionCall(func_id, args)
 
 
 def get_screen_coords(val, screen_size):
@@ -64,14 +64,13 @@ def get_screen_coords(val, screen_size):
     return x, y
 
 
-def preprocess_state(obs):
-    # avail_actions = np.zeros(len(FUNCTIONS))
-    # avail_actions[obs.observation['available_actions']] = 1
+def preprocess_state(obs, actions_in_use):
+    avail_actions = np.in1d(actions_in_use, obs.observation['available_actions'])
 
     state = dict(
         screen_player_relative=obs.observation['feature_screen'].player_relative,
         screen_selected=obs.observation['feature_screen'].selected,
-        # available_actions=avail_actions
+        available_actions=avail_actions
     )
     return state
 
@@ -112,7 +111,7 @@ def run_one_env(config, rename_if_duplicate=False, output_file=None):
             episode_reward = 0
             while (config['max_steps'] == 0 or step <= config['max_steps']) and (config['max_episodes'] == 0 or episode <= config['max_episodes']):
                 step += 1
-                state = preprocess_state(obs)
+                state = preprocess_state(obs, config['env']['action_list']['function'])
                 available_actions = dict(
                     function=obs.observation['available_actions']
                 )
