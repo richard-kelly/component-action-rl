@@ -37,6 +37,7 @@
             "function": [0, 2, 3, 331]
         },
         "action_components": {
+            "function": true,
             "screen": true,
             "minimap": false,
             "screen2": true,
