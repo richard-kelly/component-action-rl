@@ -192,7 +192,7 @@ class SC2Network:
         with tf.variable_scope('next_states_placeholders'):
             self._next_states = self._get_state_placeholder()
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
-        self._not_terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='not_terminal_placeholder')
+        self._terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='terminal_placeholder')
 
         # primary and target Q nets
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
@@ -237,7 +237,7 @@ class SC2Network:
         with tf.variable_scope('y'):
             y = {}
             for name, max_q_next in max_q_next_by_target.items():
-                y[name] = self._rewards + self._not_terminal * self._discount * max_q_next
+                y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next
 
         # these mask out the arguments that aren't used for the selected function from the loss calculation
         with tf.variable_scope('argument_masks'):
@@ -308,12 +308,12 @@ class SC2Network:
             feed_dict[self._states[name]] = np.expand_dims(state[name], axis=0)
         return sess.run([self._predict_summaries, self._q], feed_dict=feed_dict)
 
-    def train_batch(self, sess, states, actions, rewards, next_states, not_terminal):
+    def train_batch(self, sess, states, actions, rewards, next_states, terminal):
         batch = actions['function'].shape[0]
         feed_dict = {
             self._actions['function']: actions['function'].reshape(batch),
             self._rewards: rewards,
-            self._not_terminal: not_terminal
+            self._terminal: terminal
         }
 
         for name, _ in self._states.items():
