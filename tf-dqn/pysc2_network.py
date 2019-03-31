@@ -5,6 +5,7 @@ import numpy as np
 class SC2Network:
     def __init__(
             self,
+            double_dqn,
             learning_rate,
             discount,
             max_checkpoints,
@@ -14,6 +15,7 @@ class SC2Network:
             environment_properties
     ):
 
+        self._double_dqn = double_dqn
         self._learning_rate = learning_rate
         self._discount = discount
         self._max_checkpoints = max_checkpoints
@@ -37,6 +39,7 @@ class SC2Network:
 
         # the output operations
         self._q = None
+        self._actions_selected_by_q = None
         self._optimizer = None
         self.var_init = None
         self.saver = None
@@ -206,6 +209,12 @@ class SC2Network:
             action_neg_inf_q_vals = self._q_target['function'] * 0 - 1000000
             self._q_target['function'] = tf.where(self._next_states['available_actions'], self._q_target['function'], action_neg_inf_q_vals)
 
+        # action selected by q for Double DQN
+        with tf.variable_scope('actions_selected_by_q'):
+            self._actions_selected_by_q = {}
+            for name, q_vals in self._q.items():
+                self._actions_selected_by_q[name] = tf.argmax(q_vals, axis=-1, name='name')
+
         # used for copying parameters from primary to target net
         self._q_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_primary")
         self._q_target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_target")
@@ -217,27 +226,39 @@ class SC2Network:
                 if val is not None:
                     self._actions[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
 
+        # next action placeholders for Double DQN
+        with tf.variable_scope('action_next_placeholders'):
+            self._actions_next = {}
+            for name, val in self._q.items():
+                if val is not None:
+                    self._actions_next[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
+
         # one hot the actions from experiences
         with tf.variable_scope('action_one_hot'):
             action_one_hot = self._get_action_one_hot(self._actions)
 
-        # The prediction by the primary Q network for the actual actions
+        # The q value by the primary Q network for the actual actions taken in an experience
         with tf.variable_scope('prediction'):
             training_action_q = {}
             for name, q_vals in self._q.items():
                 training_action_q[name] = tf.reduce_sum(q_vals * action_one_hot[name], reduction_indices=-1, name=name)
 
-        # Next state q value
-        with tf.variable_scope('optimization_target'):
-            max_q_next_by_target = {}
-            for name, q_vals in self._q_target.items():
-                max_q_next_by_target[name] = tf.reduce_max(q_vals, axis=-1, name=name)
-
         # target Q(s,a)
         with tf.variable_scope('y'):
             y = {}
-            for name, max_q_next in max_q_next_by_target.items():
-                y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next
+            if self._double_dqn:
+                # Double DQN uses target network Q val of primary network next action
+                for name, action in self._actions_next.items():
+                    row = tf.range(tf.shape(action)[0])
+                    combined = tf.stack([row, action], axis=1)
+                    max_q_next = tf.gather_nd(self._q_target[name], combined)
+                    y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next
+            else:
+                # DQN uses target network max Q val
+                for name, q_vals in self._q_target.items():
+                    max_q_next_by_target = tf.reduce_max(q_vals, axis=-1, name=name)
+                    y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next_by_target
+
 
         # these mask out the arguments that aren't used for the selected function from the loss calculation
         with tf.variable_scope('argument_masks'):
@@ -309,12 +330,23 @@ class SC2Network:
         return sess.run([self._predict_summaries, self._q], feed_dict=feed_dict)
 
     def train_batch(self, sess, states, actions, rewards, next_states, terminal):
-        batch = actions['function'].shape[0]
+        # need batch size to reshape actions
+        batch_size = actions['function'].shape[0]
+
+        # everything else is a dictionary, so we need to loop through them
         feed_dict = {
-            self._actions['function']: actions['function'].reshape(batch),
             self._rewards: rewards,
             self._terminal: terminal
         }
+
+        if self._double_dqn:
+            actions_next_feed_dict = {}
+            for name in self._states:
+                actions_next_feed_dict[self._states[name]] = next_states[name]
+            actions_next = sess.run(self._actions_selected_by_q, feed_dict=actions_next_feed_dict)
+            for name, using in self._action_components.items():
+                if using:
+                    feed_dict[self._actions_next[name]] = actions_next[name].reshape(batch_size)
 
         for name, _ in self._states.items():
             feed_dict[self._states[name]] = states[name]
@@ -322,7 +354,7 @@ class SC2Network:
 
         for name, using in self._action_components.items():
             if using:
-                feed_dict[self._actions[name]] = actions[name].reshape(batch)
+                feed_dict[self._actions[name]] = actions[name].reshape(batch_size)
 
         summary, _ = sess.run([self._train_summaries, self._optimizer], feed_dict=feed_dict)
 

@@ -8,6 +8,7 @@
     "max_steps": 150000,
     "max_episodes": 0,
 
+    "double_DQN": true,
     "discount": 0.99,
     "learning_rate": 5e-5,
     "batch_size": 32,
