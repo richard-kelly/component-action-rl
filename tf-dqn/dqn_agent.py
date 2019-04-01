@@ -41,6 +41,7 @@ class DQNAgent:
         self._memory = LatestReplayMemory(self._config['memory_size'])
         self._network = SC2Network(
             self._config['double_DQN'],
+            self._config['dueling_network'],
             self._config['learning_rate'],
             self._config['discount'],
             self._config['model_checkpoint_max'],

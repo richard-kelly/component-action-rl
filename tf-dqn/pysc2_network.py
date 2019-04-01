@@ -6,6 +6,7 @@ class SC2Network:
     def __init__(
             self,
             double_dqn,
+            dueling,
             learning_rate,
             discount,
             max_checkpoints,
@@ -16,6 +17,7 @@ class SC2Network:
     ):
 
         self._double_dqn = double_dqn
+        self._dueling = dueling
         self._learning_rate = learning_rate
         self._discount = discount
         self._max_checkpoints = max_checkpoints
@@ -48,6 +50,7 @@ class SC2Network:
         self._define_model()
 
     def _get_network(self, inputs):
+        # concat parts of input
         screen_player_relative_one_hot = tf.contrib.layers.one_hot_encoding(
             labels=inputs['screen_player_relative'],
             num_classes=5
@@ -59,6 +62,7 @@ class SC2Network:
         )[:, :, :, 1:]
         screen = tf.concat([screen_player_relative_one_hot, screen_selected_one_hot], axis=-1, name='screen_input')
 
+        # begin shared conv layers
         conv1_spatial = tf.layers.conv2d(
             inputs=screen,
             filters=16,
@@ -77,6 +81,7 @@ class SC2Network:
             activation=tf.nn.relu
         )
 
+        # spatial policy splits off before max pooling
         max_pool = tf.layers.max_pooling2d(
             inputs=conv2_spatial,
             pool_size=3,
@@ -91,6 +96,31 @@ class SC2Network:
             shape=[-1, int(self._screen_size * self._screen_size / 9 * 32)],
             name='conv2_spatial_flat'
         )
+
+        # for dueling net, split here
+        if self._dueling:
+            fc_value1 = tf.layers.dense(
+                non_spatial_flat,
+                1024,
+                activation=tf.nn.relu,
+                kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
+                name='fc_value1'
+            )
+            fc_value2 = tf.layers.dense(
+                fc_value1,
+                1024,
+                activation=tf.nn.relu,
+                kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
+                name='fc_value2'
+            )
+            value = tf.layers.dense(
+                fc_value2,
+                1,
+                activation=None,
+                kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
+                name='value'
+            )
+
         fc_non_spatial = tf.layers.dense(
             non_spatial_flat,
             1024,
@@ -141,7 +171,16 @@ class SC2Network:
         for name, val in logits.items():
             if val is not None:
                 logits_filtered[name] = val
-        return logits_filtered
+
+        if self._dueling:
+            # logits_filtered is A(s,a), value is V(s)
+            # Q(s,a) = V(s) + A(s,a) - 1/|A| * SUM_a(A(s,a))
+            q_s_a = {}
+            for name, advantage in logits_filtered.items():
+                q_s_a[name] = value + (advantage - tf.reduce_mean(advantage, axis=0, keepdims=True))
+            return q_s_a
+        else:
+            return logits_filtered
 
     def _get_state_placeholder(self):
         return dict(
@@ -175,7 +214,7 @@ class SC2Network:
             )
 
     def _get_action_one_hot(self, actions):
-        # action components we are using. Function is always included (for times when we iterate over action part names)
+        # action components we are using.
         comp = self._action_components
         n = self._screen_size * self._screen_size
         # number of options for some function args hard coded here
@@ -205,7 +244,8 @@ class SC2Network:
             self._q['function'] = tf.where(self._states['available_actions'], self._q['function'], action_neg_inf_q_vals)
         with tf.variable_scope('Q_target'):
             self._q_target = self._get_network(self._next_states)
-            # available actions mask; avoids using negative infinity, and is the right size
+            # TODO: FIX THIS BUG - For DDQN at least I think this can cause huge loss because the primary net chooses a
+            #  legal action for s', but then the target net finds the q value of -1000000 for it.
             action_neg_inf_q_vals = self._q_target['function'] * 0 - 1000000
             self._q_target['function'] = tf.where(self._next_states['available_actions'], self._q_target['function'], action_neg_inf_q_vals)
 
@@ -259,7 +299,6 @@ class SC2Network:
                     max_q_next_by_target = tf.reduce_max(q_vals, axis=-1, name=name)
                     y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next_by_target
 
-
         # these mask out the arguments that aren't used for the selected function from the loss calculation
         with tf.variable_scope('argument_masks'):
             argument_masks = self._get_argument_masks()
@@ -268,6 +307,7 @@ class SC2Network:
         with tf.variable_scope('losses'):
             losses = []
             for name in y.keys():
+                # TODO: double check that this argument_mask is right for the target net.
                 argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
                 training_action_q_masked = training_action_q[name] * argument_mask
                 y_masked = tf.stop_gradient(y[name]) * argument_mask
