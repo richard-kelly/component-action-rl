@@ -219,7 +219,7 @@ class SC2Network:
         n = self._screen_size * self._screen_size
         # number of options for some function args hard coded here
         return dict(
-            function=tf.one_hot(actions['function'], len(self._action_list), 1.0, 0.0, name='function'),
+            function=tf.one_hot(actions['function'], len(self._action_list['function']), 1.0, 0.0, name='function'),
             screen=tf.one_hot(actions['screen'], n, 1.0, 0.0, name='screen') if comp['screen'] else None,
             screen2=tf.one_hot(actions['screen2'], n, 1.0, 0.0, name='screen2') if comp['screen2'] else None,
             select_point_act=tf.one_hot(actions['select_point_act'], 4, 1.0, 0.0, name='select_point_act') if comp['select_point_act'] else None,
