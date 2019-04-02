@@ -228,14 +228,9 @@ class SC2Network:
         )
 
     def _define_model(self):
-        # placeholders for (s, a, s', r, terminal)
+        # placeholders for (s, s', r, terminal) [a is below]
         with tf.variable_scope('states_placeholders'):
             self._states = self._get_state_placeholder()
-        with tf.variable_scope('action_placeholders'):
-            self._actions = {}
-            for name, using in self._action_components.items():
-                if using:
-                    self._actions[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
         with tf.variable_scope('next_states_placeholders'):
             self._next_states = self._get_state_placeholder()
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
@@ -249,78 +244,84 @@ class SC2Network:
             self._q['function'] = tf.where(self._states['available_actions'], self._q['function'], action_neg_inf_q_vals)
         with tf.variable_scope('Q_target'):
             self._q_target = self._get_network(self._next_states)
+            # TODO: FIX THIS BUG - For DDQN at least I think this can cause huge loss because the primary net chooses a
+            #  legal action for s', but then the target net finds the q value of -1000000 for it.
             action_neg_inf_q_vals = self._q_target['function'] * 0 - 1000000
             self._q_target['function'] = tf.where(self._next_states['available_actions'], self._q_target['function'], action_neg_inf_q_vals)
-            # used for copying parameters from primary to target net
+
+        # action selected by q for Double DQN
+        with tf.variable_scope('actions_selected_by_q'):
+            self._actions_selected_by_q = {}
+            for name, q_vals in self._q.items():
+                self._actions_selected_by_q[name] = tf.argmax(q_vals, axis=-1, name='name')
+
+        # used for copying parameters from primary to target net
         self._q_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_primary")
         self._q_target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_target")
 
-        if self._double_dqn:
-            # action selected by q for Double DQN
-            with tf.variable_scope('actions_selected_by_q'):
-                self._actions_selected_by_q = {}
-                for name, q_vals in self._q.items():
-                    self._actions_selected_by_q[name] = tf.argmax(q_vals, axis=-1, name='name')
-            # next action placeholders for Double DQN
-            with tf.variable_scope('action_next_placeholders'):
-                self._actions_next = {}
-                for name, val in self._q.items():
-                    if val is not None:
-                        self._actions_next[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
+        # action placeholders
+        with tf.variable_scope('action_placeholders'):
+            self._actions = {}
+            for name, val in self._q.items():
+                if val is not None:
+                    self._actions[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
+
+        # next action placeholders for Double DQN
+        with tf.variable_scope('action_next_placeholders'):
+            self._actions_next = {}
+            for name, val in self._q.items():
+                if val is not None:
+                    self._actions_next[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
+
+        # one hot the actions from experiences
+        with tf.variable_scope('action_one_hot'):
+            action_one_hot = self._get_action_one_hot(self._actions)
+
+        # The q value by the primary Q network for the actual actions taken in an experience
+        with tf.variable_scope('prediction'):
+            training_action_q = {}
+            for name, q_vals in self._q.items():
+                training_action_q[name] = tf.reduce_sum(q_vals * action_one_hot[name], reduction_indices=-1, name=name)
+
+        # target Q(s,a)
+        with tf.variable_scope('y'):
+            y = {}
+            if self._double_dqn:
+                # Double DQN uses target network Q val of primary network next action
+                for name, action in self._actions_next.items():
+                    row = tf.range(tf.shape(action)[0])
+                    combined = tf.stack([row, action], axis=1)
+                    max_q_next = tf.gather_nd(self._q_target[name], combined)
+                    y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next
+            else:
+                # DQN uses target network max Q val
+                for name, q_vals in self._q_target.items():
+                    max_q_next_by_target = tf.reduce_max(q_vals, axis=-1, name=name)
+                    y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next_by_target
 
         # these mask out the arguments that aren't used for the selected function from the loss calculation
         with tf.variable_scope('argument_masks'):
             argument_masks = self._get_argument_masks()
 
-        # The q value by the primary Q network for the actual actions taken in an experience
-        with tf.variable_scope('prediction'):
-            # one hot the actions from experiences
-            with tf.variable_scope('action_one_hot'):
-                action_one_hot = self._get_action_one_hot(self._actions)
-            action_component_q_vals = []
-            for name, q_vals in self._q.items():
-                # scalar q value for this component of the action
-                action_component_q = tf.reduce_sum(q_vals * action_one_hot[name], axis=-1)
-                # argument mask is scalar 1 if this argument is used for the action, 0 otherwise
-                argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
-                action_component_q_masked = action_component_q * argument_mask
-                action_component_q_vals.append(action_component_q_masked)
-            training_action_q = tf.reduce_mean(tf.stack(action_component_q_vals, axis=1), axis=1, name='training_action_q')
-
-        # Q(s',a')
-        with tf.variable_scope('y'):
-            if self._double_dqn:
-                # DDQN uses target network Q val of primary network next action (a'): Q_t(s', argmax_{a}Q_p(s',a))
-                for name, action in self._actions_next.items():
-                    row = tf.range(tf.shape(action)[0])
-                    combined = tf.stack([row, action], axis=1)
-                    max_q_next = tf.gather_nd(self._q_target[name], combined)
-                    #y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next
-            else:
-                # DQN uses target network max Q val to choose next action a': max_{a}Q_t(s', a)
-                target_actions_next = {}
-                for name, q_vals in self._q_target.items():
-                    target_actions_next[name] = tf.argmax(q_vals, axis=1)
-                with tf.variable_scope('action_one_hot'):
-                    action_one_hot = self._get_action_one_hot(target_actions_next)
-                next_action_component_q_vals = []
-                for name, q_vals in self._q_target.items():
-                    # scalar q value for this component of the action
-                    action_component_q = tf.reduce_sum(q_vals * action_one_hot[name], axis=-1)
-                    # argument mask is scalar 1 if this argument is used for the action, 0 otherwise
-                    argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
-                    action_component_q_masked = action_component_q * argument_mask
-                    next_action_component_q_vals.append(action_component_q_masked)
-                next_state_q = tf.reduce_mean(tf.stack(next_action_component_q_vals, axis=1), axis=1, name='training_next_state_q')
-                y = self._rewards + (1 - self._terminal) * self._discount * next_state_q
-
         # calculate losses (average of all args to the action function (including the function) compared pairwise)
         with tf.variable_scope('losses'):
-            loss = tf.losses.huber_loss(training_action_q, tf.stop_gradient(y))
+            losses = []
+            for name in y.keys():
+                # TODO: double check that this argument_mask is right for the target net.
+                argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
+                training_action_q_masked = training_action_q[name] * argument_mask
+                y_masked = tf.stop_gradient(y[name]) * argument_mask
+                # these masks work because we are doing MSE loss, so if both the predicted q and target q are 0,
+                # the loss is zero. (unlike the available actions mask which has to make the values effectively -inf)
+                loss = tf.losses.huber_loss(training_action_q_masked, y_masked)
+                tf.summary.scalar('training_loss_' + name, loss)
+                losses.append(loss)
+            losses_avg = tf.reduce_mean(tf.stack(losses), name='losses_avg')
             reg_loss = tf.losses.get_regularization_loss()
-            final_loss = loss + reg_loss
-            tf.summary.scalar('training_loss', loss)
-            tf.summary.scalar('regularization_loss', reg_loss)
+            final_loss = losses_avg + reg_loss
+            tf.summary.scalar('training_loss_avg', losses_avg)
+            tf.summary.scalar('training_loss_reg', reg_loss)
+            tf.summary.scalar('training_loss_final', final_loss)
 
         self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(final_loss)
 
