@@ -228,9 +228,14 @@ class SC2Network:
         )
 
     def _define_model(self):
-        # placeholders for (s, s', r, terminal) [a is below]
+        # placeholders for (s, a, s', r, terminal)
         with tf.variable_scope('states_placeholders'):
             self._states = self._get_state_placeholder()
+        with tf.variable_scope('action_placeholders'):
+            self._actions = {}
+            for name, using in self._action_components:
+                if using:
+                    self._actions[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
         with tf.variable_scope('next_states_placeholders'):
             self._next_states = self._get_state_placeholder()
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
@@ -244,34 +249,25 @@ class SC2Network:
             self._q['function'] = tf.where(self._states['available_actions'], self._q['function'], action_neg_inf_q_vals)
         with tf.variable_scope('Q_target'):
             self._q_target = self._get_network(self._next_states)
-            # TODO: FIX THIS BUG - For DDQN at least I think this can cause huge loss because the primary net chooses a
-            #  legal action for s', but then the target net finds the q value of -1000000 for it.
             action_neg_inf_q_vals = self._q_target['function'] * 0 - 1000000
             self._q_target['function'] = tf.where(self._next_states['available_actions'], self._q_target['function'], action_neg_inf_q_vals)
-
-        # action selected by q for Double DQN
-        with tf.variable_scope('actions_selected_by_q'):
-            self._actions_selected_by_q = {}
-            for name, q_vals in self._q.items():
-                self._actions_selected_by_q[name] = tf.argmax(q_vals, axis=-1, name='name')
-
         # used for copying parameters from primary to target net
         self._q_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_primary")
         self._q_target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_target")
 
-        # action placeholders
-        with tf.variable_scope('action_placeholders'):
-            self._actions = {}
-            for name, val in self._q.items():
-                if val is not None:
-                    self._actions[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
+        if self._double_dqn:
+            # action selected by q for Double DQN
+            with tf.variable_scope('actions_selected_by_q'):
+                self._actions_selected_by_q = {}
+                for name, q_vals in self._q.items():
+                    self._actions_selected_by_q[name] = tf.argmax(q_vals, axis=-1, name='name')
 
-        # next action placeholders for Double DQN
-        with tf.variable_scope('action_next_placeholders'):
-            self._actions_next = {}
-            for name, val in self._q.items():
-                if val is not None:
-                    self._actions_next[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
+            # next action placeholders for Double DQN
+            with tf.variable_scope('action_next_placeholders'):
+                self._actions_next = {}
+                for name, val in self._q.items():
+                    if val is not None:
+                        self._actions_next[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
 
         # one hot the actions from experiences
         with tf.variable_scope('action_one_hot'):
@@ -307,12 +303,14 @@ class SC2Network:
         with tf.variable_scope('losses'):
             losses = []
             for name in y.keys():
-                # TODO: double check that this argument_mask is right for the target net.
+                # argument mask is scalar 1 if this argument is used for the transition action, 0 otherwise
+                # Here the arguments are masked according to the action taken in the transition,
+                # not the next state a', because we need to compare the components' q values against each other
+                # these masks work because we are doing MSE loss, so if both the predicted q and target q are 0,
+                # the loss is zero. (unlike the available actions mask which has to make the values effectively -inf)
                 argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
                 training_action_q_masked = training_action_q[name] * argument_mask
                 y_masked = tf.stop_gradient(y[name]) * argument_mask
-                # these masks work because we are doing MSE loss, so if both the predicted q and target q are 0,
-                # the loss is zero. (unlike the available actions mask which has to make the values effectively -inf)
                 loss = tf.losses.huber_loss(training_action_q_masked, y_masked)
                 tf.summary.scalar('training_loss_' + name, loss)
                 losses.append(loss)
