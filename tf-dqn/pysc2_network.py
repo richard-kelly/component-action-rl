@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-
+import math
 
 class SC2Network:
     def __init__(
@@ -88,6 +88,12 @@ class SC2Network:
             activation=tf.nn.relu
         )
 
+        with tf.variable_scope('spatial_gradient_scale'):
+            # scale because multiple action component streams are meeting here
+            # TODO: come up with better scaling based on which action components are used in training.
+            scale = 1 / math.sqrt(2)
+            conv2_spatial = (1 - scale) * tf.stop_gradient(conv2_spatial) + scale * conv2_spatial
+
         # spatial policy splits off before max pooling
         max_pool = tf.layers.max_pooling2d(
             inputs=conv2_spatial,
@@ -104,6 +110,12 @@ class SC2Network:
             name='conv2_spatial_flat'
         )
 
+        if self._dueling:
+            with tf.variable_scope('dueling_gradient_scale'):
+                # scale the gradients entering last shared layer, as in original Dueling DQN paper
+                scale = 1 / math.sqrt(2)
+                non_spatial_flat = (1 - scale) * tf.stop_gradient(non_spatial_flat) + scale * non_spatial_flat
+
         # for dueling net, split here
         if self._dueling:
             fc_value1 = tf.layers.dense(
@@ -111,14 +123,14 @@ class SC2Network:
                 1024,
                 activation=tf.nn.relu,
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-                name='fc_value1'
+                name='fc_value_1'
             )
             fc_value2 = tf.layers.dense(
                 fc_value1,
                 1024,
                 activation=tf.nn.relu,
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-                name='fc_value2'
+                name='fc_value_2'
             )
             value = tf.layers.dense(
                 fc_value2,
@@ -128,21 +140,27 @@ class SC2Network:
                 name='value'
             )
 
-        fc_non_spatial = tf.layers.dense(
+        fc_non_spatial_1 = tf.layers.dense(
             non_spatial_flat,
             1024,
             activation=tf.nn.relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-            name='fc_1'
+            name='fc_non_spatial_1'
         )
 
-        fc_non_spatial2 = tf.layers.dense(
-            fc_non_spatial,
+        fc_non_spatial_2 = tf.layers.dense(
+            fc_non_spatial_1,
             1024,
             activation=tf.nn.relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-            name='fc_2'
+            name='fc_non_spatial_2'
         )
+
+        with tf.variable_scope('non_spatial_gradient_scale'):
+            # scale because multiple action component streams are meeting here
+            # TODO: come up with better scaling based on which action components are used in training.
+            scale = 1 / math.sqrt(2)
+            fc_non_spatial_2 = (1 - scale) * tf.stop_gradient(fc_non_spatial_2) + scale * fc_non_spatial_2
 
         spatial_policy_1 = tf.layers.conv2d(
             inputs=conv2_spatial,
@@ -152,7 +170,6 @@ class SC2Network:
             name='spatial_policy_1'
         )
 
-        comp = self._action_components
         if self._action_components['screen2']:
             spatial_policy_2 = tf.layers.conv2d(
                 inputs=conv2_spatial,
@@ -165,29 +182,34 @@ class SC2Network:
             spatial_policy_2 = None
 
         n = self._screen_size
-        logits = dict(
-            function=tf.layers.dense(fc_non_spatial2, 4, name='function'),
+        comp = self._action_components
+        action_q_vals = dict(
+            function=tf.layers.dense(fc_non_spatial_2, 4, name='function'),
             screen=tf.reshape(spatial_policy_1, [-1, n * n], name='screen') if comp['screen'] else None,
             screen2=tf.reshape(spatial_policy_2, [-1, n * n], name='screen2') if comp['screen2'] else None,
-            queued=tf.layers.dense(fc_non_spatial2, 2, name='queued') if comp['queued'] else None,
-            select_point_act=tf.layers.dense(fc_non_spatial2, 4, name='select_point_act') if comp['select_point_act'] else None,
-            select_add=tf.layers.dense(fc_non_spatial2, 2, name='select_add') if comp['select_add'] else None
+            queued=tf.layers.dense(fc_non_spatial_2, 2, name='queued') if comp['queued'] else None,
+            select_point_act=tf.layers.dense(fc_non_spatial_2, 4, name='select_point_act') if comp['select_point_act'] else None,
+            select_add=tf.layers.dense(fc_non_spatial_2, 2, name='select_add') if comp['select_add'] else None
         )
 
-        logits_filtered = {}
-        for name, val in logits.items():
+        action_q_vals_filtered = {}
+        for name, val in action_q_vals.items():
             if val is not None:
-                logits_filtered[name] = val
+                action_q_vals_filtered[name] = val
 
         if self._dueling:
-            # logits_filtered is A(s,a), value is V(s)
+            # action_q_vals_filtered is A(s,a), value is V(s)
             # Q(s,a) = V(s) + A(s,a) - 1/|A| * SUM_a(A(s,a))
-            q_s_a = {}
-            for name, advantage in logits_filtered.items():
-                q_s_a[name] = value + (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True))
-            return q_s_a
-        else:
-            return logits_filtered
+            with tf.variable_scope('q_vals'):
+                for name, advantage in action_q_vals_filtered.items():
+                    action_q_vals_filtered[name] = tf.add(value, (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True)), name=name)
+
+        with tf.variable_scope('available_actions_mask'):
+            # available actions mask; avoids using negative infinity, and is the right size
+            action_neg_inf_q_vals = action_q_vals_filtered['function'] * 0 - 1000000
+            action_q_vals_filtered['function'] = tf.where(inputs['available_actions'], action_q_vals_filtered['function'], action_neg_inf_q_vals)
+
+        return action_q_vals_filtered
 
     def _get_state_placeholder(self):
         return dict(
@@ -251,13 +273,8 @@ class SC2Network:
         # primary and target Q nets
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
             self._q = self._get_network(self._states)
-            # available actions mask; avoids using negative infinity, and is the right size
-            action_neg_inf_q_vals = self._q['function'] * 0 - 1000000
-            self._q['function'] = tf.where(self._states['available_actions'], self._q['function'], action_neg_inf_q_vals)
         with tf.variable_scope('Q_target'):
             self._q_target = self._get_network(self._next_states)
-            action_neg_inf_q_vals = self._q_target['function'] * 0 - 1000000
-            self._q_target['function'] = tf.where(self._next_states['available_actions'], self._q_target['function'], action_neg_inf_q_vals)
         # used for copying parameters from primary to target net
         self._q_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_primary")
         self._q_target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_target")
@@ -326,7 +343,6 @@ class SC2Network:
             final_loss = losses_avg + reg_loss
             tf.summary.scalar('training_loss_avg', losses_avg)
             tf.summary.scalar('training_loss_reg', reg_loss)
-            tf.summary.scalar('training_loss_final', final_loss)
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._learning_decay == 'exponential':
