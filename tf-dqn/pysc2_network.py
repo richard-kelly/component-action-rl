@@ -162,9 +162,9 @@ class SC2Network:
             function=tf.layers.dense(fc_non_spatial2, 4, name='function'),
             screen=tf.reshape(spatial_policy_1, [-1, n * n], name='screen') if comp['screen'] else None,
             screen2=tf.reshape(spatial_policy_2, [-1, n * n], name='screen2') if comp['screen2'] else None,
-            queued=tf.layers.dense(fc_non_spatial, 2, name='queued') if comp['queued'] else None,
-            select_point_act=tf.layers.dense(fc_non_spatial, 4, name='select_point_act') if comp['select_point_act'] else None,
-            select_add=tf.layers.dense(fc_non_spatial, 2, name='select_add') if comp['select_add'] else None
+            queued=tf.layers.dense(fc_non_spatial2, 2, name='queued') if comp['queued'] else None,
+            select_point_act=tf.layers.dense(fc_non_spatial2, 4, name='select_point_act') if comp['select_point_act'] else None,
+            select_add=tf.layers.dense(fc_non_spatial2, 2, name='select_add') if comp['select_add'] else None
         )
 
         logits_filtered = {}
@@ -177,7 +177,7 @@ class SC2Network:
             # Q(s,a) = V(s) + A(s,a) - 1/|A| * SUM_a(A(s,a))
             q_s_a = {}
             for name, advantage in logits_filtered.items():
-                q_s_a[name] = value + (advantage - tf.reduce_mean(advantage, axis=0, keepdims=True))
+                q_s_a[name] = value + (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True))
             return q_s_a
         else:
             return logits_filtered
@@ -233,7 +233,7 @@ class SC2Network:
             self._states = self._get_state_placeholder()
         with tf.variable_scope('action_placeholders'):
             self._actions = {}
-            for name, using in self._action_components:
+            for name, using in self._action_components.items():
                 if using:
                     self._actions[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
         with tf.variable_scope('next_states_placeholders'):
