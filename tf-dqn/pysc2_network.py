@@ -8,6 +8,9 @@ class SC2Network:
             double_dqn,
             dueling,
             learning_rate,
+            learning_decay_mode,
+            learning_decay_steps,
+            learning_decay_param,
             discount,
             max_checkpoints,
             checkpoint_hours,
@@ -19,6 +22,9 @@ class SC2Network:
         self._double_dqn = double_dqn
         self._dueling = dueling
         self._learning_rate = learning_rate
+        self._learning_decay = learning_decay_mode
+        self._learning_decay_steps = learning_decay_steps
+        self._learning_decay_factor = learning_decay_param
         self._discount = discount
         self._max_checkpoints = max_checkpoints
         self._checkpoint_hours = checkpoint_hours
@@ -33,6 +39,7 @@ class SC2Network:
         self._action_list = environment_properties['action_list']
 
         # define the placeholders
+        self._global_step = None
         self._states = None
         self._actions = None
         self._rewards = None
@@ -321,7 +328,14 @@ class SC2Network:
             tf.summary.scalar('training_loss_reg', reg_loss)
             tf.summary.scalar('training_loss_final', final_loss)
 
-        self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate).minimize(final_loss)
+        self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
+        if self._learning_decay == 'exponential':
+            lr = tf.train.exponential_decay(self._learning_rate, self._global_step, self._learning_decay_steps, self._learning_decay_factor)
+        elif self._learning_decay == 'exponential':
+            lr = tf.train.polynomial_decay(self._learning_rate, self._global_step, self._learning_decay_steps, self._learning_decay_factor)
+        else:
+            lr = self._learning_rate
+        self._optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(final_loss)
 
         # tensorboard summaries
         self._train_summaries = tf.summary.merge_all(scope='losses')
@@ -367,14 +381,15 @@ class SC2Network:
             feed_dict[self._states[name]] = np.expand_dims(state[name], axis=0)
         return sess.run([self._predict_summaries, self._q], feed_dict=feed_dict)
 
-    def train_batch(self, sess, states, actions, rewards, next_states, terminal):
+    def train_batch(self, sess, global_step, states, actions, rewards, next_states, terminal):
         # need batch size to reshape actions
         batch_size = actions['function'].shape[0]
 
         # everything else is a dictionary, so we need to loop through them
         feed_dict = {
             self._rewards: rewards,
-            self._terminal: terminal
+            self._terminal: terminal,
+            self._global_step: global_step
         }
 
         if self._double_dqn:

@@ -8,10 +8,14 @@
     "max_steps": 150000,
     "max_episodes": 0,
 
+    "learning_rate": 5e-5,
+    "learning_rate_decay_method": "exponential",
+    "learning_rate_decay_steps": 10000,
+    "learning_rate_decay_param": 0.9,
+
     "double_DQN": true,
     "dueling_network": true,
     "discount": 0.99,
-    "learning_rate": 5e-5,
     "batch_size": 32,
     "reg_type": "l1",
     "reg_scale": 1e-5,

@@ -43,6 +43,9 @@ class DQNAgent:
             self._config['double_DQN'],
             self._config['dueling_network'],
             self._config['learning_rate'],
+            self._config['learning_rate_decay_method'],
+            self._config['learning_rate_decay_steps'],
+            self._config['learning_rate_decay_param'],
             self._config['discount'],
             self._config['model_checkpoint_max'],
             self._config['model_checkpoint_every_n_hours'],
@@ -177,7 +180,7 @@ class DQNAgent:
         self._times['sample'] += time.time() - last_time
         last_time = time.time()
 
-        summary = self._network.train_batch(self._sess, states, actions, rewards, next_states, is_terminal)
+        summary = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states, is_terminal)
         self._writer.add_summary(summary, self._steps)
 
         self._times['train_batch'] += time.time() - last_time
