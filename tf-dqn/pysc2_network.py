@@ -347,7 +347,7 @@ class SC2Network:
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._learning_decay == 'exponential':
             lr = tf.train.exponential_decay(self._learning_rate, self._global_step, self._learning_decay_steps, self._learning_decay_factor)
-        elif self._learning_decay == 'exponential':
+        elif self._learning_decay == 'polynomial':
             lr = tf.train.polynomial_decay(self._learning_rate, self._global_step, self._learning_decay_steps, self._learning_decay_factor)
         else:
             lr = self._learning_rate
