@@ -140,7 +140,7 @@ class DQNAgent:
 
     def _choose_action(self, state, available_actions):
         action = {}
-        if not self._memory_start_size_reached or random.random() < self._epsilon:
+        if not self._config['run_model_no_training'] and (not self._memory_start_size_reached or random.random() < self._epsilon):
             if self._sample_action is None:
                 # store one action to serve as action specification
                 _, self._sample_action = self._network.predict_one(self._sess, state)
