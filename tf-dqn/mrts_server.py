@@ -83,10 +83,12 @@ class MRTSServer:
         # ints "ID", "player", "x", "y", "resources", "hitpoints"
         # ID here is a unique id for each unit in the game
         # resources is same for all bases belonging to a player, and equal to players[x]['resources']
-        units = state['pgs']['units']
+        units = {}
+        for unit in state['pgs']['units']:
+            units[unit['ID']] = unit
 
         units_feature = np.zeros((map_size, map_size), dtype=np.int8)
-        for unit in units:
+        for _, unit in units.items():
             if unit['type'] == 'Base':
                 units_feature[unit['y'], unit['x']] = 0
             elif unit['type'] == 'Barracks':
@@ -105,7 +107,7 @@ class MRTSServer:
 
         # TODO: try other representations of health... normalized real number? thermometer encoding?
         health_feature = np.zeros((map_size, map_size), dtype=np.int8)
-        for unit in units:
+        for _, unit in units.items():
             if unit['hitpoints'] == 1:
                 health_feature[unit['y'], unit['x']] = 1
             elif unit['hitpoints'] == 2:
@@ -118,14 +120,9 @@ class MRTSServer:
                 health_feature[unit['y'], unit['x']] = 5
         state_for_rl['health'] = health_feature
 
-        eta_feature = np.zeros((map_size, map_size), dtype=np.int8)
-        for unit in units:
-            if unit['hitpoints'] == 1:
-                health_feature[unit['y'], unit['x']] = 1
-
         # switch player ownership feature based on which player we are
         players_feature = np.zeros((map_size, map_size), dtype=np.int8)
-        for unit in units:
+        for _, unit in units.items():
             if unit['player'] == 0:
                 if player == 0:
                     players_feature[unit['y'], unit['x']] = 1
@@ -147,6 +144,17 @@ class MRTSServer:
             current_actions[ongoing_action['ID']] = dict(time=ongoing_action['time'], action=ongoing_action['action'])
         # action_durations = {0: None, 1: }
         # for action in current_actions:
+
+        eta_feature = np.zeros((map_size, map_size), dtype=np.int8)
+        for ID, current_action in current_actions.items():
+            action = current_action['action']
+            time = current_action['time']
+            unit = units[current_action['ID']]
+            if action['action']['type'] == 1:
+                # move
+                eta =
+                health_feature[unit['y'], unit['x']] = 1
+        state_for_rl['eta'] = eta_feature
 
         # An action for a turn is a list with actions for each unit: a dict with
         # "unitID": int,
