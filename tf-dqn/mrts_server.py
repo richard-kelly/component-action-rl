@@ -48,18 +48,32 @@ class MRTSServer:
         print('received pre game analysis')
 
     def _handle_get_action(self, state, player):
-        # some things we have to avoid in an action:
-        #   don't send a action for a unit that is already doing an action
-        #   don't try to produce two things in the same place
-
-
+        state_for_rl = {}
         # state:
         #   map (0, 0) is top left
         game_frame = state['time']
         map_w = state['pgs']['width']
         map_h = state['pgs']['height']
-        # terrain can be 0 (empty) or 1 (wall)
-        terrain = np.array([int(i) for i in state['pgs']['terrain']], dtype=np.int32).reshape((map_w, map_h))
+        biggest = max([map_w, map_h])
+        if biggest <= 8:
+            map_size = 8
+        elif biggest <= 16:
+            map_size = 16
+        elif biggest <= 32:
+            map_size = 32
+        elif biggest <= 64:
+            map_size = 64
+        elif biggest <= 128:
+            map_size = 128
+        else:
+            print('Map dimension', biggest, 'is too big.')
+            return
+
+        # terrain can be 0 (empty) or 1 (wall); in row major order
+        terrain = np.array([int(i) for i in state['pgs']['terrain']], dtype=np.int8).reshape((map_h, map_w))
+        # for now pad non-square maps with 'walls' in the bottom and right
+        terrain = np.pad(terrain, ((0, map_size - map_h), (0, map_size - map_w)), 'constant', constant_values=1)
+        state_for_rl['terrain'] = terrain
 
         # list, each player is dict with ints "ID" and "resources"
         # the ID here is the same as player parameter to this function and "player" in unit object below
@@ -71,15 +85,68 @@ class MRTSServer:
         # resources is same for all bases belonging to a player, and equal to players[x]['resources']
         units = state['pgs']['units']
 
+        units_feature = np.zeros((map_size, map_size), dtype=np.int8)
+        for unit in units:
+            if unit['type'] == 'Base':
+                units_feature[unit['y'], unit['x']] = 0
+            elif unit['type'] == 'Barracks':
+                units_feature[unit['y'], unit['x']] = 1
+            elif unit['type'] == 'Worker':
+                units_feature[unit['y'], unit['x']] = 2
+            elif unit['type'] == 'Light':
+                units_feature[unit['y'], unit['x']] = 3
+            elif unit['type'] == 'Heavy':
+                units_feature[unit['y'], unit['x']] = 4
+            elif unit['type'] == 'Ranged':
+                units_feature[unit['y'], unit['x']] = 5
+            elif unit['type'] == 'Resource':
+                units_feature[unit['y'], unit['x']] = 6
+        state_for_rl['units'] = units_feature
+
+        # TODO: try other representations of health... normalized real number? thermometer encoding?
+        health_feature = np.zeros((map_size, map_size), dtype=np.int8)
+        for unit in units:
+            if unit['hitpoints'] == 1:
+                health_feature[unit['y'], unit['x']] = 1
+            elif unit['hitpoints'] == 2:
+                health_feature[unit['y'], unit['x']] = 2
+            elif unit['hitpoints'] == 3:
+                health_feature[unit['y'], unit['x']] = 3
+            elif unit['hitpoints'] == 4:
+                health_feature[unit['y'], unit['x']] = 4
+            elif unit['hitpoints'] >= 5:
+                health_feature[unit['y'], unit['x']] = 5
+        state_for_rl['health'] = health_feature
+
+        eta_feature = np.zeros((map_size, map_size), dtype=np.int8)
+        for unit in units:
+            if unit['hitpoints'] == 1:
+                health_feature[unit['y'], unit['x']] = 1
+
+        # switch player ownership feature based on which player we are
+        players_feature = np.zeros((map_size, map_size), dtype=np.int8)
+        for unit in units:
+            if unit['player'] == 0:
+                if player == 0:
+                    players_feature[unit['y'], unit['x']] = 1
+                else:
+                    players_feature[unit['y'], unit['x']] = 2
+            elif unit['player'] == 1:
+                if player == 0:
+                    players_feature[unit['y'], unit['x']] = 2
+                else:
+                    players_feature[unit['y'], unit['x']] = 1
+        state_for_rl['players'] = players_feature
+
         # actions ongoing for both players. A list with dicts:
-        #   "ID":     int [unit ID],
-        #   "time":   int [game frame when the action was given]
-        #   "action": {type, paramater, unitType, etc.]
-        current_actions = state['actions']
+        #   "ID":       int [unit ID],
+        #   "time":     int [game frame when the action was given]
+        #   "action":   {type, parameter, unitType, etc.]
+        current_actions = {}
+        for ongoing_action in state['actions']:
+            current_actions[ongoing_action['ID']] = dict(time=ongoing_action['time'], action=ongoing_action['action'])
         # action_durations = {0: None, 1: }
         # for action in current_actions:
-
-        units_taking_actions = [elem['ID'] for elem in current_actions]
 
         # An action for a turn is a list with actions for each unit: a dict with
         # "unitID": int,
@@ -92,20 +159,27 @@ class MRTSServer:
         #       "unitType":  str [the name of the type of unit to produce with a produce action]
         #   }
 
-        # no_op for every unit
+        # Actions have to have a target / be legal at the time they are issued.
+        # So even though actions take time to complete, there has to be a target at the time an attack is issued,
+        # or a space has to be empty in order to issue a move action.
+        # This is probably why attacks are all faster than moves.
+        # some things we have to avoid in an action:
+        #   don't send an action for a unit that is already doing an action
+        #   don't try to produce two things in the same place
+
         actions = []
 
-        # for unit in units:
-        #     if unit['player'] == player and unit['type'] == 'Worker' and unit['ID'] not in units_taking_actions:
-        #         action = dict(
-        #             unitID=unit['ID'],
-        #             unitAction=dict(
-        #                 type=1,
-        #                 # parameter=random.randint(0, 5)
-        #                 parameter=2
-        #             )
-        #         )
-        #         actions.append(action)
+        for unit in units:
+            if unit['player'] == player and unit['type'] == 'Worker' and unit['ID'] not in current_actions:
+                action = dict(
+                    unitID=unit['ID'],
+                    unitAction=dict(
+                        type=5,
+                        # parameter=random.randint(0, 5)
+                        parameter=2
+                    )
+                )
+                actions.append(action)
 
         return json.dumps(actions)
 
