@@ -39,6 +39,11 @@ class MRTSServer:
         #   canHarvest (bool), canMove (bool), canAttack (bool)
         #   produces (list of str): e.g. ['Base', 'Barracks']
         #   producedBy (list of str): e.g. ['Base']
+
+        # convert to dict indexed by unit names
+        self._unit_types = {}
+        for unit_type in utt['unitTypes']:
+            self._unit_types[unit_type['name']] = unit_type
         self._unit_types = utt['unitTypes']
 
     def _handle_pre_game_analysis(self, state, ms):
@@ -83,6 +88,7 @@ class MRTSServer:
         # ints "ID", "player", "x", "y", "resources", "hitpoints"
         # ID here is a unique id for each unit in the game
         # resources is same for all bases belonging to a player, and equal to players[x]['resources']
+        # convert to dict indexed by ID
         units = {}
         for unit in state['pgs']['units']:
             units[unit['ID']] = unit
@@ -139,22 +145,71 @@ class MRTSServer:
         #   "ID":       int [unit ID],
         #   "time":     int [game frame when the action was given]
         #   "action":   {type, parameter, unitType, etc.]
+        # convert to dict indexed by ID
         current_actions = {}
         for ongoing_action in state['actions']:
-            current_actions[ongoing_action['ID']] = dict(time=ongoing_action['time'], action=ongoing_action['action'])
+            current_actions[ongoing_action['ID']] = ongoing_action
         # action_durations = {0: None, 1: }
         # for action in current_actions:
 
+        # TODO: add more information about current actions (type, target, etc.)
         eta_feature = np.zeros((map_size, map_size), dtype=np.int8)
         for ID, current_action in current_actions.items():
             action = current_action['action']
             time = current_action['time']
             unit = units[current_action['ID']]
-            if action['action']['type'] == 1:
+            if action['type'] == 1:
                 # move
-                eta =
-                health_feature[unit['y'], unit['x']] = 1
+                action_duration = self._unit_types[action['type']]['moveTime']
+            elif action['type'] == 2:
+                # harvest
+                action_duration = self._unit_types[action['type']]['harvestTime']
+            elif action['type'] == 3:
+                # return
+                action_duration = self._unit_types[action['type']]['returnTime']
+            elif action['type'] == 4:
+                # produce
+                action_duration = self._unit_types[action['unitType']]['produceTime']
+            elif action['type'] == 5:
+                # attack
+                action_duration = self._unit_types[action['type']]['attackTime']
+            time_elapsed = game_frame - time
+            eta = action_duration - time_elapsed
+            if eta <= 5:
+                eta_feature[unit['y'], unit['x']] = 1
+            elif eta <= 10:
+                eta_feature[unit['y'], unit['x']] = 2
+            elif eta <= 25:
+                eta_feature[unit['y'], unit['x']] = 3
+            elif eta <= 50:
+                eta_feature[unit['y'], unit['x']] = 4
+            elif eta <= 80:
+                eta_feature[unit['y'], unit['x']] = 5
+            elif eta <= 120:
+                eta_feature[unit['y'], unit['x']] = 6
+            else:
+                eta_feature[unit['y'], unit['x']] = 7
         state_for_rl['eta'] = eta_feature
+
+        resources_feature = np.zeros((map_size, map_size), dtype=np.int8)
+        for unit in units:
+            if unit['resources'] == 1:
+                resources_feature[unit['y'], unit['x']] = 1
+            elif unit['resources'] == 2:
+                resources_feature[unit['y'], unit['x']] = 2
+            elif unit['resources'] == 2:
+                resources_feature[unit['y'], unit['x']] = 3
+            elif unit['resources'] == 3:
+                resources_feature[unit['y'], unit['x']] = 4
+            elif unit['resources'] == 4:
+                resources_feature[unit['y'], unit['x']] = 5
+            elif unit['resources'] == 5:
+                resources_feature[unit['y'], unit['x']] = 6
+            elif unit['resources'] <= 9:
+                resources_feature[unit['y'], unit['x']] = 7
+            elif unit['resources'] >= 10:
+                resources_feature[unit['y'], unit['x']] = 8
+        state_for_rl['resources'] = resources_feature
 
         # An action for a turn is a list with actions for each unit: a dict with
         # "unitID": int,
