@@ -44,7 +44,6 @@ class MRTSServer:
         self._unit_types = {}
         for unit_type in utt['unitTypes']:
             self._unit_types[unit_type['name']] = unit_type
-        self._unit_types = utt['unitTypes']
 
     def _handle_pre_game_analysis(self, state, ms):
         # nothing to do with this for now
@@ -53,6 +52,7 @@ class MRTSServer:
         print('received pre game analysis')
 
     def _handle_get_action(self, state, player):
+        print('action')
         state_for_rl = {}
         # state:
         #   map (0, 0) is top left
@@ -96,19 +96,19 @@ class MRTSServer:
         units_feature = np.zeros((map_size, map_size), dtype=np.int8)
         for _, unit in units.items():
             if unit['type'] == 'Base':
-                units_feature[unit['y'], unit['x']] = 0
-            elif unit['type'] == 'Barracks':
                 units_feature[unit['y'], unit['x']] = 1
-            elif unit['type'] == 'Worker':
+            elif unit['type'] == 'Barracks':
                 units_feature[unit['y'], unit['x']] = 2
-            elif unit['type'] == 'Light':
+            elif unit['type'] == 'Worker':
                 units_feature[unit['y'], unit['x']] = 3
-            elif unit['type'] == 'Heavy':
+            elif unit['type'] == 'Light':
                 units_feature[unit['y'], unit['x']] = 4
-            elif unit['type'] == 'Ranged':
+            elif unit['type'] == 'Heavy':
                 units_feature[unit['y'], unit['x']] = 5
-            elif unit['type'] == 'Resource':
+            elif unit['type'] == 'Ranged':
                 units_feature[unit['y'], unit['x']] = 6
+            elif unit['type'] == 'Resource':
+                units_feature[unit['y'], unit['x']] = 7
         state_for_rl['units'] = units_feature
 
         # TODO: try other representations of health... normalized real number? thermometer encoding?
@@ -158,22 +158,29 @@ class MRTSServer:
             action = current_action['action']
             time = current_action['time']
             unit = units[current_action['ID']]
-            if action['type'] == 1:
+            time_elapsed = game_frame - time
+            if action['type'] == 0:
+                # no_op
+                action_duration = action['parameter']
+            elif action['type'] == 1:
                 # move
-                action_duration = self._unit_types[action['type']]['moveTime']
+                action_duration = self._unit_types[unit['type']]['moveTime']
             elif action['type'] == 2:
                 # harvest
-                action_duration = self._unit_types[action['type']]['harvestTime']
+                action_duration = self._unit_types[unit['type']]['harvestTime']
             elif action['type'] == 3:
                 # return
-                action_duration = self._unit_types[action['type']]['returnTime']
+                action_duration = self._unit_types[unit['type']]['returnTime']
             elif action['type'] == 4:
                 # produce
                 action_duration = self._unit_types[action['unitType']]['produceTime']
             elif action['type'] == 5:
                 # attack
-                action_duration = self._unit_types[action['type']]['attackTime']
-            time_elapsed = game_frame - time
+                action_duration = self._unit_types[unit['type']]['attackTime']
+            else:
+                # error?
+                action_duration = time_elapsed
+
             eta = action_duration - time_elapsed
             if eta <= 5:
                 eta_feature[unit['y'], unit['x']] = 1
@@ -192,7 +199,7 @@ class MRTSServer:
         state_for_rl['eta'] = eta_feature
 
         resources_feature = np.zeros((map_size, map_size), dtype=np.int8)
-        for unit in units:
+        for _, unit in units.items():
             if unit['resources'] == 1:
                 resources_feature[unit['y'], unit['x']] = 1
             elif unit['resources'] == 2:
@@ -232,17 +239,20 @@ class MRTSServer:
 
         actions = []
 
-        for unit in units:
-            if unit['player'] == player and unit['type'] == 'Worker' and unit['ID'] not in current_actions:
-                action = dict(
-                    unitID=unit['ID'],
-                    unitAction=dict(
-                        type=5,
-                        # parameter=random.randint(0, 5)
-                        parameter=2
-                    )
-                )
-                actions.append(action)
+        # for _, unit in units.items():
+        #     if unit['player'] == player and unit['type'] == 'Worker' and unit['ID'] not in current_actions:
+        #         action = dict(
+        #             unitID=unit['ID'],
+        #             unitAction=dict(
+        #                 type=5,
+        #                 # parameter=random.randint(0, 5)
+        #                 parameter=2
+        #             )
+        #         )
+        #         actions.append(action)
+
+        if game_frame % 10 == 0:
+            print('10')
 
         return json.dumps(actions)
 
