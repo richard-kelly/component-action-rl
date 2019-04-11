@@ -1,5 +1,4 @@
 # Echo server program
-import socket
 import asyncio
 import json
 import re
@@ -12,6 +11,9 @@ PORT = 9898
 # connection counter
 conn_count = 0
 
+# remember the player for each connection
+conn_player = {}
+
 # game details
 budgets = None
 unit_types = None
@@ -23,9 +25,19 @@ def get_conn_count():
     conn_count += 1
     return conn_count
 
+
+def handle_game_over(winner, conn_num):
+    if winner == conn_player[conn_num]:
+        print('Connection', conn_num, ': GAME OVER - WON')
+    else:
+        print('Connection', conn_num, ': GAME OVER - LOST')
+
+
 def handle_unit_type_table(utt):
+    # This gets sent (sometimes?) twice per game, because reset() gets called twice in the SocketAI implementation
     global move_conflict_resolution_strategy
     global unit_types
+
     # handles when units try to move into the same space on the same frame:
     # 1 - cancel both; 2 - cancel random; 3 - cancel alternating
     move_conflict_resolution_strategy = utt['moveConflictResolutionStrategy']
@@ -51,15 +63,16 @@ def handle_unit_type_table(utt):
         unit_types[unit_type['name']] = unit_type
 
 
-def handle_pre_game_analysis(state, ms):
+def handle_pre_game_analysis(state, ms, conn_num):
     # nothing to do with this for now
     # ms is the number of ms we have to exit this function (and send back a response, which happens elsewhere)
     # state is the staring state of the game (t=0)
-    print('received pre game analysis')
+    print('Connection', conn_num, ': Received pre-game analysis state for', ms, 'ms.')
 
 
-def handle_get_action(state, player):
-    print('action')
+def handle_get_action(state, player, conn_num):
+    global conn_player
+    conn_player[conn_num] = player
     state_for_rl = {}
     # state:
     #   map (0, 0) is top left
@@ -258,19 +271,17 @@ def handle_get_action(state, player):
     #         )
     #         actions.append(action)
 
-    if game_frame % 10 == 0:
-        print('10')
+    # if game_frame % 10 == 0:
+    #     print('10')
 
     return json.dumps(actions)
 
 
-def handle_game_over(self, winner):
-    print('winner:', winner)
-
-
 async def handle_client(reader, writer):
+    global budgets
+    global conn_player
     count = get_conn_count()
-    print('New connection:', count)
+    print('Connection', count, ': OPEN')
     writer.write(b"ack\n")
     while True:
         try:
@@ -291,61 +302,24 @@ async def handle_client(reader, writer):
         elif re.search("^preGameAnalysis", decoded):
             lines = decoded.split('\n')
             ms = int(lines[0].split()[1])
-            handle_pre_game_analysis(json.loads(lines[1]), ms)
+            handle_pre_game_analysis(json.loads(lines[1]), ms, count)
             writer.write(b"ack\n")
         elif re.search("^getAction", decoded):
             lines = decoded.split('\n')
             player = int(lines[0].split()[1])
-            action = handle_get_action(json.loads(lines[1]), player)
+            action = handle_get_action(json.loads(lines[1]), player, count)
             message = action + '\n'
             writer.write(message.encode('utf-8'))
         elif re.search("^gameOver", decoded):
-            handle_game_over(int(decoded.split()[1]))
+            handle_game_over(int(decoded.split()[1]), count)
             writer.write(b"ack\n")
         else:
             print('Message type not recognized!')
             print(decoded)
-    print('Connection closed:', count)
 
-
-# def listen():
-#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-#         sock.bind((HOST, PORT))
-#         sock.listen(backlog=1)
-#         self._conn, addr = sock.accept()
-#         with self._conn:
-#             print('Connected by', addr)
-#             # client expects acknowledgement of connection
-#             self._conn.sendall(b"ack\n")
-#             while True:
-#                 data = self._conn.recv(16384)
-#                 if not data:
-#                     break
-#                 decoded = data.decode('utf-8')
-#                 # decide what to do based on first word
-#                 if re.search("^budget", decoded):
-#                     self._budgets = [int(i) for i in decoded.split()[1:]]
-#                     self._conn.sendall(b"ack\n")
-#                 elif re.search("^utt", decoded):
-#                     self._handle_unit_type_table(json.loads(decoded.split('\n')[1]))
-#                     self._conn.sendall(b"ack\n")
-#                 elif re.search("^preGameAnalysis", decoded):
-#                     lines = decoded.split('\n')
-#                     ms = int(lines[0].split()[1])
-#                     self._handle_pre_game_analysis(json.loads(lines[1]), ms)
-#                     self._conn.sendall(b"ack\n")
-#                 elif re.search("^getAction", decoded):
-#                     lines = decoded.split('\n')
-#                     player = int(lines[0].split()[1])
-#                     action = self._handle_get_action(json.loads(lines[1]), player)
-#                     message = action + '\n'
-#                     self._conn.sendall(message.encode('utf-8'))
-#                 elif re.search("^gameOver", decoded):
-#                     self._handle_game_over(int(decoded.split()[1]))
-#                     self._conn.sendall(b"ack\n")
-#                 else:
-#                     print('Message type not recognized!')
-#                     print(decoded)
+    # if the loop exits then the connection is closed
+    print('Connection', count, ': CLOSED')
+    conn_player.pop(count, None)
 
 
 def main():
