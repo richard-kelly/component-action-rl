@@ -103,6 +103,7 @@ def handle_get_action(state, player, conn_num):
     # list, each player is dict with ints "ID" and "resources"
     # the ID here is the same as player parameter to this function and "player" in unit object below
     players = state['pgs']['players']
+    state_for_rl['available_resources'] = np.array(players[player]['resources'], dtype=np.int32)
 
     # list, each unit is dict with string "type" and
     # ints "ID", "player", "x", "y", "resources", "hitpoints"

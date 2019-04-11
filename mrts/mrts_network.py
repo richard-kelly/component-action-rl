@@ -104,11 +104,12 @@ class MRTSNetwork:
         # begin shared conv layers
         conv1_spatial = tf.layers.conv2d(
             inputs=screen,
-            filters=16,
-            kernel_size=5,
+            filters=64,
+            kernel_size=3,
             padding='same',
             name='conv1_spatial',
-            activation=tf.nn.relu
+            activation=tf.nn.relu,
+            kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
         )
 
         conv2_spatial = tf.layers.conv2d(
@@ -117,7 +118,8 @@ class MRTSNetwork:
             kernel_size=3,
             padding='same',
             name='conv2_spatial',
-            activation=tf.nn.relu
+            activation=tf.nn.relu,
+            kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
         )
 
         with tf.variable_scope('spatial_gradient_scale'):
@@ -126,20 +128,11 @@ class MRTSNetwork:
             scale = 1 / math.sqrt(2)
             conv2_spatial = (1 - scale) * tf.stop_gradient(conv2_spatial) + scale * conv2_spatial
 
-        # spatial policy splits off before max pooling
-        max_pool = tf.layers.max_pooling2d(
-            inputs=conv2_spatial,
-            pool_size=3,
-            strides=3,
-            padding='valid',
-            name='max_pool'
-        )
-
         # MUST flatten conv or pooling layers before sending to dense layer
         non_spatial_flat = tf.reshape(
-            max_pool,
-            shape=[-1, int(self._screen_size * self._screen_size / 9 * 32)],
-            name='conv2_spatial_flat'
+            conv2_spatial,
+            shape=[-1, int(self._screen_size * self._screen_size * 32)],
+            name='non_spatial_flat'
         )
 
         if self._dueling:
@@ -159,7 +152,7 @@ class MRTSNetwork:
             )
             fc_value2 = tf.layers.dense(
                 fc_value1,
-                1024,
+                512,
                 activation=tf.nn.relu,
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                 name='fc_value_2'
@@ -182,7 +175,7 @@ class MRTSNetwork:
 
         fc_non_spatial_2 = tf.layers.dense(
             fc_non_spatial_1,
-            1024,
+            512,
             activation=tf.nn.relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
             name='fc_non_spatial_2'
@@ -194,72 +187,72 @@ class MRTSNetwork:
             scale = 1 / math.sqrt(2)
             fc_non_spatial_2 = (1 - scale) * tf.stop_gradient(fc_non_spatial_2) + scale * fc_non_spatial_2
 
-        spatial_policy_1 = tf.layers.conv2d(
+        select = tf.layers.conv2d(
             inputs=conv2_spatial,
             filters=1,
             kernel_size=1,
             padding='same',
-            name='spatial_policy_1'
+            name='select'
         )
 
-        if self._action_components['screen2']:
-            spatial_policy_2 = tf.layers.conv2d(
-                inputs=conv2_spatial,
-                filters=1,
-                kernel_size=1,
-                padding='same',
-                name='spatial_policy_2'
-            )
-        else:
-            spatial_policy_2 = None
+        param = tf.layers.conv2d(
+            inputs=conv2_spatial,
+            filters=1,
+            kernel_size=1,
+            padding='same',
+            name='param'
+        )
 
         n = self._screen_size
-        comp = self._action_components
         action_q_vals = dict(
-            function=tf.layers.dense(fc_non_spatial_2, 4, name='function'),
-            screen=tf.reshape(spatial_policy_1, [-1, n * n], name='screen') if comp['screen'] else None,
-            screen2=tf.reshape(spatial_policy_2, [-1, n * n], name='screen2') if comp['screen2'] else None,
-            queued=tf.layers.dense(fc_non_spatial_2, 2, name='queued') if comp['queued'] else None,
-            select_point_act=tf.layers.dense(fc_non_spatial_2, 4, name='select_point_act') if comp['select_point_act'] else None,
-            select_add=tf.layers.dense(fc_non_spatial_2, 2, name='select_add') if comp['select_add'] else None
+            select=tf.reshape(select, [-1, n * n], name='select'),
+            type=tf.layers.dense(fc_non_spatial_2, 6, name='type'),
+            param=tf.reshape(param, [-1, n * n], name='param'),
+            unit_type=tf.layers.dense(fc_non_spatial_2, 6, name='unit_type')
         )
-
-        action_q_vals_filtered = {}
-        for name, val in action_q_vals.items():
-            if val is not None:
-                action_q_vals_filtered[name] = val
 
         if self._dueling:
             # action_q_vals_filtered is A(s,a), value is V(s)
             # Q(s,a) = V(s) + A(s,a) - 1/|A| * SUM_a(A(s,a))
             with tf.variable_scope('q_vals'):
-                for name, advantage in action_q_vals_filtered.items():
-                    action_q_vals_filtered[name] = tf.add(value, (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True)), name=name)
+                for name, advantage in action_q_vals.items():
+                    action_q_vals[name] = tf.add(value, (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True)), name=name)
 
-        with tf.variable_scope('available_actions_mask'):
-            # available actions mask; avoids using negative infinity, and is the right size
-            action_neg_inf_q_vals = action_q_vals_filtered['function'] * 0 - 1000000
-            action_q_vals_filtered['function'] = tf.where(inputs['available_actions'], action_q_vals_filtered['function'], action_neg_inf_q_vals)
+        # TODO: maybe revisit this, but seems we can avoid having to do that by using a validator outside the network
+        # with tf.variable_scope('available_actions_mask'):
+        #     # available actions mask; avoids using negative infinity, and is the right size
+        #     map_size_neg_inf_q_vals = action_q_vals['select'] * 0 - 1000000
+        #
+        #     # mask out coords where there is not 'our' unit; current player is always 1 in the input
+        #     action_q_vals['select'] = tf.where(tf.equal(inputs['players'], 1), action_q_vals['select'], map_size_neg_inf_q_vals)
+        #     # mask out units that already have an action
+        #     action_q_vals['select'] = tf.where(tf.equal(inputs['eta'], 0), map_size_neg_inf_q_vals, action_q_vals['select'])
+        #
+        #     # unit_selected = tf.argmax(action_q_vals['select'], axis=tf.constant([1, 2], dtype=tf.int32))
+        #     unit_selected = tf.argmax(action_q_vals['select'], axis=1)
+        #
+        #     action_neg_inf_q_vals = action_q_vals['function'] * 0 - 1000000
+        #     action_q_vals['function'] = tf.where(inputs['available_actions'], action_q_vals['function'], action_neg_inf_q_vals)
 
-        return action_q_vals_filtered
+        return action_q_vals
 
     def _get_state_placeholder(self):
         return dict(
-                screen_player_relative=tf.placeholder(
+                terrain=tf.placeholder(
                     shape=[None, self._screen_size, self._screen_size],
                     dtype=tf.int32,
-                    name='screen_player_relative'
+                    name='terrain'
                 ),
-                screen_selected=tf.placeholder(
+                available_resources=tf.placeholder(
+                    shape=[None, ],
+                    dtype=tf.int32,
+                    name='available_resources'
+                ),
+                units=tf.placeholder(
                     shape=[None, self._screen_size, self._screen_size],
                     dtype=tf.int32,
-                    name='screen_selected'
+                    name='units'
                 ),
-                available_actions=tf.placeholder(
-                    shape=[None, len(self._action_list['function'])],
-                    dtype=tf.bool,
-                    name='available_actions'
-                )
             )
 
     def _get_argument_masks(self):
