@@ -323,19 +323,31 @@ class SC2Network:
         with tf.variable_scope('argument_masks'):
             argument_masks = self._get_argument_masks()
 
-        # calculate losses (average of all args to the action function (including the function) compared pairwise)
+        # one hot the actions from next states
+        with tf.variable_scope('next_states_action_one_hot'):
+            next_states_action_one_hot = self._get_action_one_hot(self._actions_next)
+
+        # calculate losses (average of y compared to each component of prediction action)
         with tf.variable_scope('losses'):
+            y_parts = []
+            # just get vector of 0s of correct length
+            num_components = self._terminal * 0
+            for name in y.keys():
+                argument_mask = tf.reduce_max(next_states_action_one_hot['function'] * argument_masks[name], axis=-1)
+                # keep track of number of components used in this action
+                num_components = num_components + argument_mask
+                y_masked = tf.stop_gradient(y[name]) * argument_mask
+                y_parts.append(y_masked)
+            y_parts_stacked = tf.stack(y_parts, axis=1)
+            y_avg = tf.reduce_sum(y_parts_stacked, axis=1) / num_components
             losses = []
             for name in y.keys():
                 # argument mask is scalar 1 if this argument is used for the transition action, 0 otherwise
-                # Here the arguments are masked according to the action taken in the transition,
-                # not the next state a', because we need to compare the components' q values against each other
-                # these masks work because we are doing MSE loss, so if both the predicted q and target q are 0,
-                # the loss is zero. (unlike the available actions mask which has to make the values effectively -inf)
                 argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
                 training_action_q_masked = training_action_q[name] * argument_mask
-                y_masked = tf.stop_gradient(y[name]) * argument_mask
-                loss = tf.losses.huber_loss(training_action_q_masked, y_masked)
+                # y_masked = tf.stop_gradient(y[name]) * argument_mask
+                # instead of comparing components, we compare the q value of each component to the average of the target
+                loss = tf.losses.huber_loss(training_action_q_masked, y_avg)
                 tf.summary.scalar('training_loss_' + name, loss)
                 losses.append(loss)
             losses_avg = tf.reduce_mean(tf.stack(losses), name='losses_avg')
