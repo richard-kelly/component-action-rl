@@ -227,12 +227,6 @@ class MRTSNetwork:
         #     action_q_vals['select'] = tf.where(tf.equal(inputs['players'], 1), action_q_vals['select'], map_size_neg_inf_q_vals)
         #     # mask out units that already have an action
         #     action_q_vals['select'] = tf.where(tf.equal(inputs['eta'], 0), map_size_neg_inf_q_vals, action_q_vals['select'])
-        #
-        #     # unit_selected = tf.argmax(action_q_vals['select'], axis=tf.constant([1, 2], dtype=tf.int32))
-        #     unit_selected = tf.argmax(action_q_vals['select'], axis=1)
-        #
-        #     action_neg_inf_q_vals = action_q_vals['function'] * 0 - 1000000
-        #     action_q_vals['function'] = tf.where(inputs['available_actions'], action_q_vals['function'], action_neg_inf_q_vals)
 
         return action_q_vals
 
@@ -454,3 +448,29 @@ class MRTSNetwork:
 
         return summary
 
+    def choose_max_legal_action(self, states, q_vals):
+        batch = states['terrain'].shape[0]
+        action = {}
+        for name, vals in q_vals.items():
+            action[name] = np.zeros(vals.shape[1:], dtype=np.float32)
+
+        # SELECT = unit that is doing the action
+        # mask out tiles that don't have our units
+        q_vals['select'] = np.where(states['player'] == 1, q_vals['select'], np.nan)
+        # mask out tiles with units that already have actions
+        q_vals['select'] = np.where(states['eta'] == 0, q_vals['select'], np.nan)
+        action['select'] = np.nanargmax(q_vals['select'], axis=0)
+
+        # TYPE = type of action: [no-op, move, harvest, return, produce, attack]
+        # q_vals['type'] = np.where(np.isin(states['']))
+        unit_types = np.reshape(states['units'], (batch, self._screen_size * self._screen_size))[action['select']]
+        for i in range(batch):
+            unit_type = np.reshape(states['units'][i], (self._screen_size * self._screen_size))[action['select'][i]]
+            if unit_type == 0:
+
+
+    def flattened_to_grid(self, elem):
+        return elem % self._screen_size, elem / self._screen_size
+
+    def grid_to_flattened(self, tile):
+        return tile[0] * self._screen_size + tile[1]
