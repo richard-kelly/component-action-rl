@@ -33,6 +33,7 @@ states = dict(
     player=np.array([[[0, 2], [1, 0]], [[0, 1], [0, 2]]], dtype=np.int8),
     eta=np.array([[[0, 0], [0, 0]], [[0, 0], [0, 0]]], dtype=np.int8),
     units=np.array([[[0, 3], [3, 0]], [[0, 6], [0, 3]]], dtype=np.int8),
+    resources=np.array([[[0, 0], [0, 0]], [[0, 0], [0, 0]]], dtype=np.int8),
     available_resources=np.array([20, 20]), dtype=np.int32
 )
 
@@ -60,18 +61,153 @@ actions['select'] = np.nanargmax(q_vals['select'], axis=1)
 # q_vals['type'] = np.where(np.isin(states['']))
 unit_types = np.reshape(states['units'], (batch, n * n))[np.arange(batch), actions['select']]
 for i in range(batch):
-    if unit_types[i] == 0:
+    x, y = flattened_to_grid(actions['select'][i])
+    neighbours = get_neighbours(x, y)
+    if unit_types[i] == 1:
         # bases can only do no_op and produce (0 and 4)
-        q_vals['type'][i][np.array([1, 2, 3, 5])] = np.nan
+        q_vals['type'][i][np.array([1, 2, 3, 5], dtype=np.int32)] = np.nan
+        # are there enough resources to produce? Bases only make workers
+        can_produce = False
+        if states['available_resources'][i] >= worker_cost:
+            # is there a space to produce? first get x,y coords of selected unit
+            params_for_produce = np.zeros(n * n, dtype=np.int32)
+            for neighbour in neighbours:
+                # check for empty tiles (no terrain, no units)
+                x_n, y_n = neighbour
+                flat_n = grid_to_flattened(neighbour)
+                if states['terrain'][i][x_n, y_n] == 1:
+                    continue
+                if states['units'][i][x_n, y_n] != 0:
+                    continue
+                # this is a valid neighbour
+                params_for_produce[flat_n] = 1
+                can_produce = True
+            q_vals['param'][i] = np.where(params_for_produce, q_vals['param'][i], np.nan)
+        if not can_produce:
+            q_vals['type'][i][4] = np.nan
+        else:
+            # mask out units that can't be produced by Base
+            q_vals['unit_type'][i][np.array([0, 1, 3, 4, 5], dtype=np.int32)] = np.nan
+    elif unit_types[i] == 2:
+        # Barracks, can only do no_op and Produce L/H/R
+        q_vals['type'][i][np.array([1, 2, 3, 5], dtype=np.int32)] = np.nan
         # are there enough resources to produce?
-        if states['available_resources'][i] > worker_cost:
-            # is there a space to produce?
-            flattened_coords = actions['select'][i]
-            x, y = flattened_to_grid(flattened_coords)
-            for neighbours in get_neighbours(x, y):
-                if
-
-
+        can_produce = False
+        if states['available_resources'][i] >= min([light_cost, heavy_cost, ranged_cost]):
+            # is there a space to produce? first get x,y coords of selected unit
+            params_for_produce = np.zeros(n * n, dtype=np.int32)
+            for neighbour in neighbours:
+                # check for empty tiles (no terrain, no units)
+                x_n, y_n = neighbour
+                flat_n = grid_to_flattened(neighbour)
+                if states['terrain'][i][x_n, y_n] == 1:
+                    continue
+                if states['units'][i][x_n, y_n] != 0:
+                    continue
+                # this is a valid neighbour
+                params_for_produce[flat_n] = 1
+                can_produce = True
+            q_vals['param'][i] = np.where(params_for_produce, q_vals['param'][i], np.nan)
+        if not can_produce:
+            q_vals['type'][i][4] = np.nan
+        else:
+            # mask out units that can't be produced by barracks given current resources
+            mask = [0, 1, 2]
+            if states['available_resources'][i] < light_cost:
+                mask.append(3)
+            if states['available_resources'][i] < heavy_cost:
+                mask.append(4)
+            if states['available_resources'][i] < ranged_cost:
+                mask.append(5)
+            q_vals['unit_type'][i][np.array(mask, dtype=np.int32)] = np.nan
+    elif unit_types[i] == 3:
+        # Worker can do every action
+        # are there enough resources to produce?
+        if states['available_resources'][i] < min([barracks_cost, base_cost]):
+            # no producing
+            q_vals['type'][i][4] = np.nan
+        # is there a space to produce or move?
+        can_produce_or_move = False
+        params_for_produce_move = np.zeros(n * n, dtype=np.int32)
+        for neighbour in neighbours:
+            # check for empty tiles (no terrain, no units)
+            x_n, y_n = neighbour
+            flat_n = grid_to_flattened(neighbour)
+            if states['terrain'][i][x_n, y_n] == 1:
+                continue
+            if states['units'][i][x_n, y_n] != 0:
+                continue
+            # this is a valid neighbour
+            params_for_produce_move[flat_n] = 1
+            can_produce_or_move = True
+        if not can_produce_or_move:
+            q_vals['type'][i][np.array([1, 4], dtype=np.int32)] = np.nan
+        else:
+            # mask out units that can't be produced by worker given current resources
+            mask = [2, 3, 4, 5]
+            if states['available_resources'][i] < base_cost:
+                mask.append(0)
+            if states['available_resources'][i] < barracks_cost:
+                mask.append(1)
+            q_vals['unit_type'][i][np.array(mask, dtype=np.int32)] = np.nan
+        # is there a space to attack?
+        can_attack = False
+        params_for_attack = np.zeros(n * n, dtype=np.int32)
+        for neighbour in neighbours:
+            # check for enemy units
+            x_n, y_n = neighbour
+            flat_n = grid_to_flattened(neighbour)
+            if states['player'][i][x_n, y_n] != 2:
+                continue
+            # this is a valid neighbour with enemy unit
+            params_for_attack[flat_n] = 1
+            can_attack = True
+        if not can_attack:
+            q_vals['type'][i][5] = np.nan
+        # can the worker harvest or return?
+        params_for_harvest = np.zeros(n * n, dtype=np.int32)
+        params_for_return = np.zeros(n * n, dtype=np.int32)
+        can_harvest = False
+        can_return = False
+        if states['resources'][i][x][y] == 0:
+            # worker not holding resources; can't return but can harvest
+            # check for neighbour to harvest from
+            for neighbour in neighbours:
+                x_n, y_n = neighbour
+                flat_n = grid_to_flattened(neighbour)
+                if states['units'][i][x_n, y_n] != 6:
+                    continue
+                # this is a valid neighbour resource patch
+                params_for_harvest[flat_n] = 1
+                can_harvest = True
+        else:
+            # worker IS holding resources; can return but can't harvest
+            # check for neighbour to return to
+            for neighbour in neighbours:
+                x_n, y_n = neighbour
+                flat_n = grid_to_flattened(neighbour)
+                if not (states['units'][i][x_n, y_n] == 0 and states['player'][i][x_n, y_n] == 1):
+                    continue
+                # this is a valid base to return to
+                params_for_return[flat_n] = 1
+                can_return = True
+        if not can_harvest:
+            q_vals['type'][i][2] = np.nan
+        if not can_return:
+            q_vals['type'][i][3] = np.nan
+        # FINALLY choose which action this worker is taking
+        action = np.nanargmax(q_vals['type'][i])
+        if action == 1 or action == 4:
+            q_vals['param'][i] = np.where(params_for_produce_move, q_vals['param'][i], np.nan)
+        elif action == 2:
+            q_vals['param'][i] = np.where(params_for_harvest, q_vals['param'][i], np.nan)
+        elif action == 3:
+            q_vals['param'][i] = np.where(params_for_return, q_vals['param'][i], np.nan)
+        elif action == 5:
+            q_vals['param'][i] = np.where(params_for_attack, q_vals['param'][i], np.nan)
+    elif unit_types[i] == 4 or unit_types[i] == 5 or unit_types[i] == 6:
+        # combat unit; only Ranged is slightly different because it can attack more tiles
+        #TODO: CONTINUE
 
 
 
