@@ -356,12 +356,13 @@ class SC2Network:
                 # we compare the q value of each component to the target y; y is masked if training q is masked
                 loss = tf.losses.huber_loss(training_action_q_masked, y_masked)
                 losses.append(loss)
-            # TODO: This average is kind of meaningless, maybe it should be sum instead
-            losses_avg = tf.reduce_mean(tf.stack(losses), name='losses_avg')
+            # TODO: The following might make more sense as a sum instead of mean,
+            #  but then probably the learning rate should come down
+            training_losses = tf.reduce_mean(tf.stack(losses), name='training_losses')
             reg_loss = tf.losses.get_regularization_loss()
-            final_loss = losses_avg + reg_loss
-            tf.summary.scalar('training_loss_avg', losses_avg)
-            tf.summary.scalar('training_loss_reg', reg_loss)
+            final_loss = training_losses + reg_loss
+            tf.summary.scalar('training_loss', training_losses)
+            tf.summary.scalar('regularization_loss', reg_loss)
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._learning_decay == 'exponential':
