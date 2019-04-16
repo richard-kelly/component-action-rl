@@ -9,7 +9,7 @@ def flattened_to_grid(elem):
 
 
 def grid_to_flattened(tile):
-    return tile[0] * n + tile[1]
+    return tile[1] * n + tile[0]
 
 
 def get_neighbours(x, y):
@@ -36,7 +36,7 @@ def get_ranged_targets(x, y):
     valid_targets = []
     for target in targets:
         a, b, = target
-        if a >= 0 and a < n - 1 and b >= 0 and b < n - 1:
+        if a >= 0 and a < n and b >= 0 and b < n:
             valid_targets.append(target)
     return valid_targets
 
@@ -68,9 +68,9 @@ def choose_valid_action(states, q_vals, costs):
                     # check for empty tiles (no terrain, no units)
                     x_n, y_n = neighbour
                     flat_n = grid_to_flattened(neighbour)
-                    if states['terrain'][i][x_n, y_n] == 1:
+                    if states['terrain'][i][y_n, x_n] == 1:
                         continue
-                    if states['units'][i][x_n, y_n] != 0:
+                    if states['units'][i][y_n, x_n] != 0:
                         continue
                     # this is a valid neighbour
                     params_for_produce[flat_n] = 1
@@ -93,9 +93,9 @@ def choose_valid_action(states, q_vals, costs):
                     # check for empty tiles (no terrain, no units)
                     x_n, y_n = neighbour
                     flat_n = grid_to_flattened(neighbour)
-                    if states['terrain'][i][x_n, y_n] == 1:
+                    if states['terrain'][i][y_n, x_n] == 1:
                         continue
-                    if states['units'][i][x_n, y_n] != 0:
+                    if states['units'][i][y_n, x_n] != 0:
                         continue
                     # this is a valid neighbour
                     params_for_produce[flat_n] = 1
@@ -126,9 +126,9 @@ def choose_valid_action(states, q_vals, costs):
                 # check for empty tiles (no terrain, no units)
                 x_n, y_n = neighbour
                 flat_n = grid_to_flattened(neighbour)
-                if states['terrain'][i][x_n, y_n] == 1:
+                if states['terrain'][i][y_n, x_n] == 1:
                     continue
-                if states['units'][i][x_n, y_n] != 0:
+                if states['units'][i][y_n, x_n] != 0:
                     continue
                 # this is a valid neighbour
                 params_for_produce_move[flat_n] = 1
@@ -150,7 +150,7 @@ def choose_valid_action(states, q_vals, costs):
                 # check for enemy units
                 x_n, y_n = neighbour
                 flat_n = grid_to_flattened(neighbour)
-                if states['player'][i][x_n, y_n] != 2:
+                if states['player'][i][y_n, x_n] != 2:
                     continue
                 # this is a valid neighbour with enemy unit
                 params_for_attack[flat_n] = 1
@@ -168,7 +168,7 @@ def choose_valid_action(states, q_vals, costs):
                 for neighbour in neighbours:
                     x_n, y_n = neighbour
                     flat_n = grid_to_flattened(neighbour)
-                    if states['units'][i][x_n, y_n] != 6:
+                    if states['units'][i][y_n, x_n] != 7:
                         continue
                     # this is a valid neighbour resource patch
                     params_for_harvest[flat_n] = 1
@@ -179,7 +179,7 @@ def choose_valid_action(states, q_vals, costs):
                 for neighbour in neighbours:
                     x_n, y_n = neighbour
                     flat_n = grid_to_flattened(neighbour)
-                    if not (states['units'][i][x_n, y_n] == 0 and states['player'][i][x_n, y_n] == 1):
+                    if not (states['units'][i][y_n, x_n] == 0 and states['player'][i][y_n, x_n] == 1):
                         continue
                     # this is a valid base to return to
                     params_for_return[flat_n] = 1
@@ -209,9 +209,9 @@ def choose_valid_action(states, q_vals, costs):
                 # check for empty tiles (no terrain, no units)
                 x_n, y_n = neighbour
                 flat_n = grid_to_flattened(neighbour)
-                if states['terrain'][i][x_n, y_n] == 1:
+                if states['terrain'][i][y_n, x_n] == 1:
                     continue
-                if states['units'][i][x_n, y_n] != 0:
+                if states['units'][i][y_n, x_n] != 0:
                     continue
                 # this is a valid neighbour
                 params_for_move[flat_n] = 1
@@ -229,7 +229,7 @@ def choose_valid_action(states, q_vals, costs):
                 # check for enemy units
                 x_n, y_n = target
                 flat_n = grid_to_flattened(target)
-                if states['player'][i][x_n, y_n] != 2:
+                if states['player'][i][y_n, x_n] != 2:
                     continue
                 # this is a valid tile with enemy unit
                 params_for_attack[flat_n] = 1
@@ -255,19 +255,19 @@ def choose_valid_action(states, q_vals, costs):
 def main():
     # screen is 2x2
     q_vals = dict(
-        select=np.array([[3, 4, 5, 2], [1, 2, 3, 4]], dtype=np.float32),
-        type=np.array([[3.4, 5.6, 7.8, 9.0, 1, 11], [3, 2, 3, 14, 2, 3]], dtype=np.float32),
-        param=np.array([[3, 4, 5, 2], [1, 2, 3, 4]], dtype=np.float32),
-        unit_type=np.array([[3.4, 5.6, 7.8, 9.0, 1, 2], [3, 2, 3, 14, 2, 3]], dtype=np.float32)
+        select=np.array([[3, 4, 5, 2]], dtype=np.float32),
+        type=np.array([[3.4, 5.6, 20, 9.0, 15, 11]], dtype=np.float32),
+        param=np.array([[3, 4, 5, 2]], dtype=np.float32),
+        unit_type=np.array([[3.4, 5.6, 7.8, 9.0, 1, 2]], dtype=np.float32)
     )
 
     states = dict(
-        terrain=np.array([[[0, 0], [0, 0]], [[0, 0], [0, 0]]], dtype=np.int8),
-        player=np.array([[[0, 2], [1, 0]], [[0, 1], [0, 2]]], dtype=np.int8),
-        eta=np.array([[[0, 0], [0, 0]], [[0, 0], [0, 0]]], dtype=np.int8),
-        units=np.array([[[0, 6], [6, 0]], [[0, 6], [0, 6]]], dtype=np.int8),
-        resources=np.array([[[0, 0], [0, 0]], [[0, 0], [0, 0]]], dtype=np.int8),
-        available_resources=np.array([20, 20]), dtype=np.int32
+        terrain=np.array([[[0, 0], [0, 0]]], dtype=np.int8),
+        player=np.array([[[0, 2], [1, 1]]], dtype=np.int8),
+        eta=np.array([[[0, 0], [0, 0]]], dtype=np.int8),
+        units=np.array([[[0, 6], [3, 1]]], dtype=np.int8),
+        resources=np.array([[[0, 0], [1, 0]]], dtype=np.int8),
+        available_resources=np.array([20]), dtype=np.int32
     )
 
     costs = dict(
@@ -281,6 +281,19 @@ def main():
 
     actions = choose_valid_action(states, q_vals, costs)
     print(actions)
+    interpret_actions(actions)
+
+
+def interpret_actions(actions):
+    for i in range(actions['select'].shape[0]):
+        x, y = flattened_to_grid(actions['select'][i])
+        select_coords = '(' + str(x) + ',' + str(y) + ')'
+        a, b = flattened_to_grid(actions['param'][i])
+        param_coords = '(' + str(a) + ',' + str(b) + ')'
+        action_type = actions['type'][i]
+        action_names = ['no_op', 'move', 'harvest', 'return', 'produce', 'attack']
+        produce_types = ['base', 'barracks', 'worker', 'light', 'heavy', 'ranged']
+        print('Unit at', select_coords, 'doing', action_names[action_type], '/', param_coords, '/', produce_types[actions['unit_type'][i]])
 
 
 if __name__ == '__main__':
