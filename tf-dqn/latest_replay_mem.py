@@ -25,26 +25,26 @@ class LatestReplayMemory:
                 action={},
                 next_state={},
                 reward=np.zeros(self._max_steps, dtype=np.float32),
-                is_terminal=np.zeros(self._max_steps, dtype=np.float32)
+                is_terminal=np.zeros(self._max_steps, dtype=np.int8)
             )
 
-            for key in state.keys():
+            for key in state:
                 shape = tuple([self._max_steps] + list(state[key].shape))
-                self._samples['state'][key] = np.zeros(shape, dtype=np.int32)
-                self._samples['next_state'][key] = np.zeros(shape, dtype=np.int32)
+                self._samples['state'][key] = np.zeros(shape, dtype=state[key].dtype)
+                self._samples['next_state'][key] = np.zeros(shape, dtype=state[key].dtype)
 
-            for key in action.keys():
+            for key in action:
                 shape = tuple([self._max_steps] + [1])
                 self._samples['action'][key] = np.zeros(shape, dtype=np.int32)
 
         # replace memory in index position
-        for key in state.keys():
+        for key in state:
             self._samples['state'][key][self._index, ...] = state[key]
-        for key in action.keys():
+        for key in action:
             self._samples['action'][key][self._index, ...] = action[key]
         # next_state is None for terminal states
         if next_state is not None:
-            for key in next_state.keys():
+            for key in next_state:
                 self._samples['next_state'][key][self._index, ...] = next_state[key]
         self._samples['reward'][self._index] = reward
         self._samples['is_terminal'][self._index] = is_terminal
