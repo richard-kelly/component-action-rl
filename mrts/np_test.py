@@ -27,11 +27,12 @@ def get_neighbours(x, y):
 
 def get_ranged_targets(x, y):
     # hard-coded for range 3
-    # 5x5 square around origin
-    square = [(a, b) for a in [x - 2, x - 1, x + 1, x + 2] for b in [y - 2, y - 1, y + 1, y + 2]]
-    # 4 points that go out of the square
-    points = [(x - 3, y), (x + 3, y), (x, y - 3), (x, y + 3)]
-    targets = square + points
+    # corners of 5x5 square around origin
+    corners = [(a, b) for a in [x - 2, x - 1, x + 1, x + 2] for b in [y - 2, y - 1, y + 1, y + 2]]
+    # horizontal and vertical lines extending from the origin
+    lines_h = [(a, y) for a in [x - 3, x - 2, x - 1, x + 1, x + 2, x + 3]]
+    lines_v = [(x, b) for b in [y - 3, y - 2, y - 1, y + 1, y + 2, y + 3]]
+    targets = corners + lines_h + lines_v
     valid_targets = []
     for target in targets:
         a, b, = target
@@ -255,7 +256,7 @@ def main():
     # screen is 2x2
     q_vals = dict(
         select=np.array([[3, 4, 5, 2], [1, 2, 3, 4]], dtype=np.float32),
-        type=np.array([[3.4, 5.6, 7.8, 9.0, 1, 2], [3, 2, 3, 14, 2, 3]], dtype=np.float32),
+        type=np.array([[3.4, 5.6, 7.8, 9.0, 1, 11], [3, 2, 3, 14, 2, 3]], dtype=np.float32),
         param=np.array([[3, 4, 5, 2], [1, 2, 3, 4]], dtype=np.float32),
         unit_type=np.array([[3.4, 5.6, 7.8, 9.0, 1, 2], [3, 2, 3, 14, 2, 3]], dtype=np.float32)
     )
@@ -264,7 +265,7 @@ def main():
         terrain=np.array([[[0, 0], [0, 0]], [[0, 0], [0, 0]]], dtype=np.int8),
         player=np.array([[[0, 2], [1, 0]], [[0, 1], [0, 2]]], dtype=np.int8),
         eta=np.array([[[0, 0], [0, 0]], [[0, 0], [0, 0]]], dtype=np.int8),
-        units=np.array([[[0, 2], [1, 0]], [[0, 4], [0, 3]]], dtype=np.int8),
+        units=np.array([[[0, 6], [6, 0]], [[0, 6], [0, 6]]], dtype=np.int8),
         resources=np.array([[[0, 0], [0, 0]], [[0, 0], [0, 0]]], dtype=np.int8),
         available_resources=np.array([20, 20]), dtype=np.int32
     )
