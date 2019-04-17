@@ -1,9 +1,13 @@
 # Echo server program
+import os
 import asyncio
 import json
 import re
 import numpy as np
+import tensorflow as tf
 import random
+
+from dqn_agent import DQNAgent
 
 HOST = '127.0.0.1'
 PORT = 9898
@@ -19,6 +23,8 @@ budgets = None
 unit_types = None
 move_conflict_resolution_strategy = None
 
+rl_agent = None
+
 
 def get_conn_count():
     global conn_count
@@ -27,6 +33,7 @@ def get_conn_count():
 
 
 def handle_game_over(winner, conn_num):
+    global rl_agent
     if winner == conn_player[conn_num]:
         print('Connection', conn_num, ': GAME OVER - WON')
     else:
@@ -72,6 +79,7 @@ def handle_pre_game_analysis(state, ms, conn_num):
 
 def handle_get_action(state, player, conn_num):
     global conn_player
+    global rl_agent
     conn_player[conn_num] = player
     state_for_rl = {}
     # state:
@@ -275,6 +283,12 @@ def handle_get_action(state, player, conn_num):
     # if game_frame % 10 == 0:
     #     print('10')
 
+
+    if game_frame > 0:
+        rl_agent.observe(terminal=False, reward=0)
+
+    action = rl_agent.act(state_for_rl)
+
     return json.dumps(actions)
 
 
@@ -324,9 +338,27 @@ async def handle_client(reader, writer):
 
 
 def main():
-    loop = asyncio.get_event_loop()
-    loop.create_task(asyncio.start_server(handle_client, HOST, PORT))
-    loop.run_forever()
+    global rl_agent
+    # TODO: for now just load the config once, no batches
+    # load configuration
+    with open('pysc2_config.json', 'r') as fp:
+        config = json.load(fp=fp)
+
+    # save a copy of the configuration file being used for a run in the run's folder (first time only)
+    restore = True
+    if not os.path.exists(config['model_dir']):
+        restore = False
+    if not restore:
+        os.makedirs(config['model_dir'])
+        with open(config['model_dir'] + '/config.json', 'w+') as fp:
+            fp.write(json.dumps(config, indent=4))
+
+    with tf.Session() as sess:
+        rl_agent = DQNAgent(sess, config, restore)
+
+        loop = asyncio.get_event_loop()
+        loop.create_task(asyncio.start_server(handle_client, HOST, PORT))
+        loop.run_forever()
 
 
 if __name__ == '__main__':
