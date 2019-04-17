@@ -139,18 +139,25 @@ class DQNAgent:
             self._epsilon = self._epsilon - (self._decay * steps)
 
     def _choose_action(self, state):
-        action = {}
+        state_for_validation = {}
+        for name in state:
+            # adds a new dimension of length 1 at the beginning (the batch size)
+            state_for_validation[name] = np.expand_dims(state[name], axis=0)
         if not self._config['run_model_no_training'] and (not self._memory_start_size_reached or random.random() < self._epsilon):
             if self._sample_action is None:
                 # store one action to serve as action specification
                 _, self._sample_action = self._network.predict_one(self._sess, state)
+            random_q_vals = {}
             for name, q_values in self._sample_action.items():
-                action[name] = random.randint(0, q_values.shape[1] - 1)
+                random_q_vals[name] = np.random.rand(1, q_values.shape[1])
+            actions = self._network.choose_valid_action(state_for_validation, random_q_vals)
         else:
             summary, pred = self._network.predict_one(self._sess, state)
             self._writer.add_summary(summary, self._steps)
-            for name, q_values in pred.items():
-                action[name] = np.nanargmax(q_values)
+            actions = self._network.choose_valid_action(state_for_validation, pred)
+        action = {}
+        for name in actions:
+            action[name] = actions[name][0]
         return action
 
     def _replay(self):
