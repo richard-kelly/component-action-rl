@@ -303,46 +303,66 @@ class SC2Network:
             for name, q_vals in self._q.items():
                 training_action_q[name] = tf.reduce_sum(q_vals * action_one_hot[name], reduction_indices=-1, name=name)
 
+        # one hot the actions from next states
+        with tf.variable_scope('next_states_action_one_hot'):
+            if self._double_dqn:
+                # in DDQN, actions have been chosen by primary network in a previous pass
+                next_states_action_one_hot = self._get_action_one_hot(self._actions_next)
+            else:
+                # in DQN, choosing actions based on target network qvals for next states
+                actions_next = {}
+                for name, q_vals in self._q_target.items():
+                    actions_next[name] = tf.argmax(q_vals, axis=1)
+                next_states_action_one_hot = self._get_action_one_hot(actions_next)
+
+        # these mask out the arguments that aren't used for the selected function from the loss calculation
+        with tf.variable_scope('argument_masks'):
+            argument_masks = self._get_argument_masks()
+
         # target Q(s,a)
         with tf.variable_scope('y'):
-            y = {}
+            y_components = {}
             if self._double_dqn:
                 # Double DQN uses target network Q val of primary network next action
                 for name, action in self._actions_next.items():
                     row = tf.range(tf.shape(action)[0])
                     combined = tf.stack([row, action], axis=1)
                     max_q_next = tf.gather_nd(self._q_target[name], combined)
-                    y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next
+                    y_components[name] = (1 - self._terminal) * self._discount * max_q_next
             else:
                 # DQN uses target network max Q val
                 for name, q_vals in self._q_target.items():
                     max_q_next_by_target = tf.reduce_max(q_vals, axis=-1, name=name)
-                    y[name] = self._rewards + (1 - self._terminal) * self._discount * max_q_next_by_target
+                    y_components[name] = (1 - self._terminal) * self._discount * max_q_next_by_target
+            y_components_masked = []
+            # get vector of 0s of correct length
+            num_components = self._rewards * 0
+            for name in y_components:
+                argument_mask = tf.reduce_max(next_states_action_one_hot['function'] * argument_masks[name], axis=-1)
+                # keep track of number of components used in this action
+                num_components = num_components + argument_mask
+                y_components_masked.append(y_components[name] * argument_mask)
+            y_parts_stacked = tf.stack(y_components_masked, axis=1)
+            y = tf.stop_gradient(self._rewards + tf.reduce_sum(y_parts_stacked, axis=1) / num_components)
 
-        # these mask out the arguments that aren't used for the selected function from the loss calculation
-        with tf.variable_scope('argument_masks'):
-            argument_masks = self._get_argument_masks()
-
-        # calculate losses (average of all args to the action function (including the function) compared pairwise)
+        # calculate losses (average of y compared to each component of prediction action)
         with tf.variable_scope('losses'):
             losses = []
-            for name in y.keys():
+            for name in training_action_q:
                 # argument mask is scalar 1 if this argument is used for the transition action, 0 otherwise
-                # Here the arguments are masked according to the action taken in the transition,
-                # not the next state a', because we need to compare the components' q values against each other
-                # these masks work because we are doing MSE loss, so if both the predicted q and target q are 0,
-                # the loss is zero. (unlike the available actions mask which has to make the values effectively -inf)
                 argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
                 training_action_q_masked = training_action_q[name] * argument_mask
-                y_masked = tf.stop_gradient(y[name]) * argument_mask
+                y_masked = y * argument_mask
+                # we compare the q value of each component to the target y; y is masked if training q is masked
                 loss = tf.losses.huber_loss(training_action_q_masked, y_masked)
-                tf.summary.scalar('training_loss_' + name, loss)
                 losses.append(loss)
-            losses_avg = tf.reduce_mean(tf.stack(losses), name='losses_avg')
+            # TODO: The following might make more sense as a sum instead of mean,
+            #  but then probably the learning rate should come down
+            training_losses = tf.reduce_mean(tf.stack(losses), name='training_losses')
             reg_loss = tf.losses.get_regularization_loss()
-            final_loss = losses_avg + reg_loss
-            tf.summary.scalar('training_loss_avg', losses_avg)
-            tf.summary.scalar('training_loss_reg', reg_loss)
+            final_loss = training_losses + reg_loss
+            tf.summary.scalar('training_loss', training_losses)
+            tf.summary.scalar('regularization_loss', reg_loss)
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._learning_decay == 'exponential':
@@ -364,9 +384,19 @@ class SC2Network:
         self._episode_summaries = tf.summary.merge_all(scope='episode_summaries')
 
         with tf.variable_scope('predict_summaries'):
+            predict_actions = {}
             for name, q_vals in self._q.items():
-                action_q_val = tf.reduce_max(q_vals, name=name)
-                tf.summary.scalar('step_q_' + name, action_q_val)
+                predict_actions[name] = tf.argmax(q_vals, axis=1)
+            predict_action_one_hot = self._get_action_one_hot(predict_actions)
+            predict_q_vals = []
+            count = tf.Variable(tf.zeros([], dtype=np.float32), trainable=False)
+            for name, q_vals in self._q.items():
+                argument_mask = tf.reduce_max(predict_action_one_hot['function'] * argument_masks[name], axis=-1)
+                predict_action_q_masked = tf.reduce_max(q_vals) * argument_mask
+                predict_q_vals.append(predict_action_q_masked)
+                count = count + argument_mask
+            predicted_q_val_avg = tf.reduce_sum(tf.stack(predict_q_vals)) / count
+            tf.summary.scalar('predicted_q_val', tf.squeeze(predicted_q_val_avg))
         self._predict_summaries = tf.summary.merge_all(scope='predict_summaries')
 
         # variable initializer
