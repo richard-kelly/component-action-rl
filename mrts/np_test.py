@@ -162,7 +162,7 @@ def choose_valid_action(states, q_vals, costs):
             params_for_return = np.zeros(n * n, dtype=np.int32)
             can_harvest = False
             can_return = False
-            if states['resources'][i][x][y] == 0:
+            if states['resources'][i][y][x] == 0:
                 # worker not holding resources; can't return but can harvest
                 # check for neighbour to harvest from
                 for neighbour in neighbours:
@@ -179,7 +179,7 @@ def choose_valid_action(states, q_vals, costs):
                 for neighbour in neighbours:
                     x_n, y_n = neighbour
                     flat_n = grid_to_flattened(neighbour)
-                    if not (states['units'][i][y_n, x_n] == 0 and states['player'][i][y_n, x_n] == 1):
+                    if not (states['units'][i][y_n, x_n] == 1 and states['player'][i][y_n, x_n] == 1):
                         continue
                     # this is a valid base to return to
                     params_for_return[flat_n] = 1
@@ -256,7 +256,7 @@ def main():
     # screen is 2x2
     q_vals = dict(
         select=np.array([[3, 4, 5, 2]], dtype=np.float32),
-        type=np.array([[3.4, 5.6, 20, 9.0, 15, 11]], dtype=np.float32),
+        type=np.array([[3.4, 5.6, 20, 90, 15, 11]], dtype=np.float32),
         param=np.array([[3, 4, 5, 2]], dtype=np.float32),
         unit_type=np.array([[3.4, 5.6, 7.8, 9.0, 1, 2]], dtype=np.float32)
     )
