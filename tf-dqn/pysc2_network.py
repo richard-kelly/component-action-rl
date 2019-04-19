@@ -45,6 +45,7 @@ class SC2Network:
         self._rewards = None
         self._next_states = None
         self._terminal = None
+        self._per_weights = None
 
         # the output operations
         self._q = None
@@ -269,6 +270,7 @@ class SC2Network:
             self._next_states = self._get_state_placeholder()
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
         self._terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='terminal_placeholder')
+        self._per_weights = tf.placeholder(shape=[None, ], dtype=tf.float32, name='per_weights_placeholder')
 
         # primary and target Q nets
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
@@ -348,13 +350,17 @@ class SC2Network:
         # calculate losses (average of y compared to each component of prediction action)
         with tf.variable_scope('losses'):
             losses = []
+            td = []
+            num_components = self._rewards * 0
             for name in training_action_q:
                 # argument mask is scalar 1 if this argument is used for the transition action, 0 otherwise
                 argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
                 training_action_q_masked = training_action_q[name] * argument_mask
                 y_masked = y * argument_mask
                 # we compare the q value of each component to the target y; y is masked if training q is masked
-                loss = tf.losses.huber_loss(training_action_q_masked, y_masked)
+                loss = tf.losses.huber_loss(training_action_q_masked, y_masked, weights=self._per_weights)
+                td.append(tf.abs(training_action_q_masked - y_masked))
+                num_components = num_components + argument_mask
                 losses.append(loss)
             # TODO: The following might make more sense as a sum instead of mean,
             #  but then probably the learning rate should come down
@@ -363,6 +369,7 @@ class SC2Network:
             final_loss = training_losses + reg_loss
             tf.summary.scalar('training_loss', training_losses)
             tf.summary.scalar('regularization_loss', reg_loss)
+            td_abs = tf.sum(tf.stack(td, axis=1), axis=1) / num_components
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._learning_decay == 'exponential':
@@ -427,7 +434,7 @@ class SC2Network:
             feed_dict[self._states[name]] = np.expand_dims(state[name], axis=0)
         return sess.run([self._predict_summaries, self._q], feed_dict=feed_dict)
 
-    def train_batch(self, sess, global_step, states, actions, rewards, next_states, terminal):
+    def train_batch(self, sess, global_step, states, actions, rewards, next_states, terminal, weights):
         # need batch size to reshape actions
         batch_size = actions['function'].shape[0]
 
@@ -437,6 +444,11 @@ class SC2Network:
             self._terminal: terminal,
             self._global_step: global_step
         }
+
+        if weights is not None:
+            feed_dict[self._per_weights] = weights
+        else:
+            feed_dict[self._per_weights] = np.ones(batch_size)
 
         if self._double_dqn:
             actions_next_feed_dict = {}

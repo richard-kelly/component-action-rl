@@ -6,6 +6,7 @@ import time
 
 from pysc2_network import SC2Network
 from latest_replay_mem import LatestReplayMemory
+from prioritized_replay_mem import PrioritizedReplayMemory
 
 
 class DQNAgent:
@@ -38,7 +39,16 @@ class DQNAgent:
         else:
             self._decay = 0.0
 
-        self._memory = LatestReplayMemory(self._config['memory_size'])
+        if self._config['use_priority_experience_replay']:
+            self._memory = PrioritizedReplayMemory(
+                self._config['memory_size'],
+                config['per_alpha'],
+                config['per_starting_beta'],
+                config['per_beta_anneal_steps']
+            )
+        else:
+            self._memory = LatestReplayMemory(self._config['memory_size'])
+
         self._network = SC2Network(
             self._config['double_DQN'],
             self._config['dueling_network'],
@@ -175,12 +185,16 @@ class DQNAgent:
 
         # states stored in memory as tuple (state, action, reward, next_state)
         # next_state=None if state is terminal
-        states, actions, rewards, next_states, is_terminal = self._memory.sample(self._config['batch_size'])
+        if self._config['use_priority_experience_replay']:
+            states, actions, rewards, next_states, is_terminal, weights = self._memory.sample(self._config['batch_size'])
+        else:
+            states, actions, rewards, next_states, is_terminal = self._memory.sample(self._config['batch_size'])
+            weights = None
 
         self._times['sample'] += time.time() - last_time
         last_time = time.time()
 
-        summary = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states, is_terminal)
+        summary = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states, is_terminal, weights)
         self._writer.add_summary(summary, self._steps)
 
         self._times['train_batch'] += time.time() - last_time
