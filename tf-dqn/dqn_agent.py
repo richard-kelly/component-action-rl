@@ -194,8 +194,11 @@ class DQNAgent:
         self._times['sample'] += time.time() - last_time
         last_time = time.time()
 
-        summary = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states, is_terminal, weights)
+        summary, priorities = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states, is_terminal, weights)
         self._writer.add_summary(summary, self._steps)
+
+        if self._config['use_priority_experience_replay']:
+            self._memory.update_priorities_of_last_sample(priorities)
 
         self._times['train_batch'] += time.time() - last_time
         self._time_count += 1

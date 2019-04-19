@@ -86,7 +86,6 @@ class PrioritizedReplayMemory(LatestReplayMemory):
 
         state, action, reward, next_state, is_terminal = self._get_transitions(indices)
 
-        # TODO: calculate weights and add those to returned tuple
         weights = np.zeros(num_samples, dtype=np.float32)
         fraction_of_memory = 1 / self.get_size()
         for i in range(num_samples):

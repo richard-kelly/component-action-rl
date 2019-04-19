@@ -50,6 +50,7 @@ class SC2Network:
         # the output operations
         self._q = None
         self._actions_selected_by_q = None
+        self._td_abs = None
         self._optimizer = None
         self.var_init = None
         self.saver = None
@@ -369,7 +370,7 @@ class SC2Network:
             final_loss = training_losses + reg_loss
             tf.summary.scalar('training_loss', training_losses)
             tf.summary.scalar('regularization_loss', reg_loss)
-            td_abs = tf.sum(tf.stack(td, axis=1), axis=1) / num_components
+            self._td_abs = tf.sum(tf.stack(td, axis=1), axis=1) / num_components
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._learning_decay == 'exponential':
@@ -448,7 +449,7 @@ class SC2Network:
         if weights is not None:
             feed_dict[self._per_weights] = weights
         else:
-            feed_dict[self._per_weights] = np.ones(batch_size)
+            feed_dict[self._per_weights] = np.ones(batch_size, dtype=np.float32)
 
         if self._double_dqn:
             actions_next_feed_dict = {}
@@ -467,7 +468,7 @@ class SC2Network:
             if using:
                 feed_dict[self._actions[name]] = actions[name].reshape(batch_size)
 
-        summary, _ = sess.run([self._train_summaries, self._optimizer], feed_dict=feed_dict)
+        summary, td_abs, _ = sess.run([self._train_summaries, self._td_abs, self._optimizer], feed_dict=feed_dict)
 
-        return summary
+        return summary, td_abs
 
