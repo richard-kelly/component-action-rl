@@ -9,9 +9,9 @@
     "max_episodes": 0,
 
     "learning_rate": 5e-5,
-    "learning_rate_decay_method": "exponential",
+    "learning_rate_decay_method": "none",
     "learning_rate_decay_steps": 10000,
-    "learning_rate_decay_param": 0.9,
+    "learning_rate_decay_param": 1.0,
 
     "double_DQN": true,
     "dueling_network": true,
@@ -41,7 +41,7 @@
     "env": {
         "screen_size": 84,
         "minimap_size": 84,
-        "map_name": "CollectMineralShards",
+        "map_name": "MoveToBeacon",
         "visualize": false,
         "step_mul": 8,
         "action_list": {
