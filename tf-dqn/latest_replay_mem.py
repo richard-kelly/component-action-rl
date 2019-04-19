@@ -54,16 +54,17 @@ class LatestReplayMemory:
             self._is_full = True
         self._index = self._index % self._max_steps
 
-    def sample(self, num_samples):
+    def _get_sample_indices(self, num_samples):
         if self._is_full:
             if num_samples > self._max_steps:
                 num_samples = self._max_steps
-            indices = np.random.choice(self._indexing_array, num_samples, replace=False)
+            return np.random.choice(self._indexing_array, num_samples, replace=False)
         else:
             if num_samples > self._index:
                 num_samples = self._index
-            indices = np.random.choice(self._indexing_array[:self._index], num_samples, replace=False)
+            return np.random.choice(self._indexing_array[:self._index], num_samples, replace=False)
 
+    def _get_transitions(self, indices):
         state = {}
         next_state = {}
         for k, v in self._samples['state'].items():
@@ -78,3 +79,8 @@ class LatestReplayMemory:
         is_terminal = self._samples['is_terminal'][indices]
 
         return state, action, reward, next_state, is_terminal
+
+    def sample(self, num_samples):
+        indices = self._get_sample_indices(num_samples)
+
+        return self._get_transitions(indices)
