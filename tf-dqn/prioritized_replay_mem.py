@@ -1,4 +1,5 @@
 import math
+import random
 import numpy as np
 from latest_replay_mem import LatestReplayMemory
 
@@ -11,7 +12,7 @@ class PrioritizedReplayMemory(LatestReplayMemory):
         self._alpha = alpha
         self._beta = beta
         self._beta_change = (1.0 - beta) / steps_to_anneal_b_to_1
-
+        self._epsilon = 0.01
         self._max_priority = 1.0
 
         self._last_indices = None
@@ -65,11 +66,19 @@ class PrioritizedReplayMemory(LatestReplayMemory):
         super().add_sample(state, action, reward, next_state, is_terminal)
 
     def _get_sample_indices(self, num_samples):
-        # TODO: implement
-
+        indices = np.zeros(num_samples, dtype=np.int32)
+        size = self._tree[0] / num_samples
+        for i in range(num_samples):
+            segment = size * i
+            val = random.uniform(segment, segment + size)
+            indices[i] = self._get_index(val)
+        return indices
 
     def update_priorities_of_last_sample(self, new_priorities):
-        # TODO: implement
+        # add epsilon to make sure priorities are non-zero
+        new_priorities += self._epsilon
+        for i in range(new_priorities.shape[0]):
+            self._set_priority(self._last_indices[i], new_priorities[i])
 
     def sample(self, num_samples):
         indices = self._get_sample_indices(num_samples)
@@ -78,6 +87,12 @@ class PrioritizedReplayMemory(LatestReplayMemory):
         state, action, reward, next_state, is_terminal = self._get_transitions(indices)
 
         # TODO: calculate weights and add those to returned tuple
-        weights = None
+        weights = np.zeros(num_samples, dtype=np.float32)
+        fraction_of_memory = 1 / self.get_size()
+        for i in range(num_samples):
+            probability = self._tree[self._tree_offset + indices[1]] / self._tree[0]
+            weights[i] = (fraction_of_memory / probability) ** self._beta
+        max_weight = np.max(weights)
+        weights /= max_weight
 
         return state, action, reward, next_state, is_terminal, weights
