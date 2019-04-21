@@ -1,7 +1,7 @@
 import math
 import random
 import numpy as np
-from latest_replay_mem import LatestReplayMemory
+from memory.latest_replay_mem import LatestReplayMemory
 
 
 class PrioritizedReplayMemory(LatestReplayMemory):
