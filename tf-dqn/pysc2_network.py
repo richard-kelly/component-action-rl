@@ -370,7 +370,7 @@ class SC2Network:
             final_loss = training_losses + reg_loss
             tf.summary.scalar('training_loss', training_losses)
             tf.summary.scalar('regularization_loss', reg_loss)
-            self._td_abs = tf.sum(tf.stack(td, axis=1), axis=1) / num_components
+            self._td_abs = tf.reduce_sum(tf.stack(td, axis=1), axis=1) / num_components
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._learning_decay == 'exponential':
