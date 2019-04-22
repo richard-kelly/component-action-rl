@@ -9,3 +9,4 @@ examples/
 tf-dqn/old_runs/
 tf-dqn/old_models/
 tf-dqn/tests/
+tf-dqn/memory/__pycache__/

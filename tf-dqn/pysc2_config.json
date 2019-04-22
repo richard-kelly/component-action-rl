@@ -1,8 +1,8 @@
 {
     "run_model_no_training": false,
 
-    "model_dir": "models/mi_batch_l1",
-    "model_checkpoint_frequency": 20000,
+    "model_dir": "models/apr22",
+    "model_checkpoint_frequency": 50000,
     "model_checkpoint_max": 1,
     "model_checkpoint_every_n_hours": 24,
     "max_steps": 150000,

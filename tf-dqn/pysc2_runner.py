@@ -90,7 +90,13 @@ def run_one_env(config, rename_if_duplicate=False, output_file=None):
             fp.write(json.dumps(config, indent=4))
 
     max_ep_score = None
-    last_10_ep_score = []
+    all_ep_scores = []
+    num_eps = 20
+    last_n_ep_score = []
+
+    if output_file is not None:
+        with open(output_file, 'a+') as f:
+            f.write('Run_Name Max_Score Avg_Score Last_' + str(num_eps) + '_Score\n')
 
     with sc2_env.SC2Env(
             map_name=config['env']['map_name'],
@@ -120,9 +126,10 @@ def run_one_env(config, rename_if_duplicate=False, output_file=None):
                 if obs.step_type is StepType.LAST:
                     terminal = True
                     print("Episode", episode, "finished. Score:", episode_reward)
-                    if len(last_10_ep_score) == 10:
-                        last_10_ep_score.pop(0)
-                    last_10_ep_score.append(episode_reward)
+                    if len(last_n_ep_score) == num_eps:
+                        last_n_ep_score.pop(0)
+                    last_n_ep_score.append(episode_reward)
+                    all_ep_scores.append(episode_reward)
                     if max_ep_score is None or episode_reward > max_ep_score:
                         max_ep_score = episode_reward
                     episode_reward = 0
@@ -144,10 +151,11 @@ def run_one_env(config, rename_if_duplicate=False, output_file=None):
                 # actions passed into env.step() are in a list with one action per player
                 obs = env.step([action_for_sc])[0]
 
-    if output_file:
+    if output_file is not None:
         with open(output_file, 'a+') as f:
-            avg = sum(last_10_ep_score) / 10
-            f.write(config['model_dir'] + ' ' + str(max_ep_score) + ' ' + str(avg) + '\n')
+            avg_last = sum(last_n_ep_score) / len(last_n_ep_score)
+            avg = sum(all_ep_scores) / len(all_ep_scores)
+            f.write(config['model_dir'] + ' ' + str(max_ep_score) + ' ' + str(avg) + ' ' + str(avg_last) + '\n')
 
 
 def main():
@@ -173,7 +181,8 @@ def main():
                 name += '_' + param + '_' + '{:.2e}'.format(config[param])
             config['model_dir'] = base_name + '/' + name
             print('****** Starting a new run in this batch: ' + name + ' ******')
-            run_one_env(config, rename_if_duplicate=True, output_file=base_name + '/batch_summary.txt')
+            time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            run_one_env(config, rename_if_duplicate=True, output_file=base_name + '/_' + time + '_batch_summary.txt')
     else:
         run_one_env(config, rename_if_duplicate=False)
 
