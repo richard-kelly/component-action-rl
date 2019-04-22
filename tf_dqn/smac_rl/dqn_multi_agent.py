@@ -5,8 +5,8 @@ import random
 import json
 import time
 
-from pysc2_network import Network
-from latest_replay_mem import Memory
+from tf_dqn.smac_rl.network import Network
+from tf_dqn.common.latest_replay_mem import LatestReplayMemory
 
 with open('config.json', 'r') as fp:
     config = json.load(fp=fp)
@@ -40,7 +40,7 @@ class DQNAgent:
         else:
             self._decay = 0.0
 
-        self._memory = Memory(config['memory_size'])
+        self._memory = LatestReplayMemory(config['memory_size'])
         self._network = Network(
             config['learning_rate'],
             config['discount'],

@@ -10,3 +10,10 @@ tf-dqn/old_runs/
 tf-dqn/old_models/
 tf-dqn/tests/
 tf-dqn/memory/__pycache__/
+tf_dqn/smac_rl/models/
+tf_dqn/pysc2_rl/models/
+tf_dqn/pysc2_rl/__pycache__/
+tf_dqn/__pycache__/
+tf_dqn/common/__pycache__/
+tensorforce-pysc2/__pycache__/
+tensorforce-pysc2/models/

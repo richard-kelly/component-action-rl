@@ -12,9 +12,8 @@ from pysc2.lib import features
 from pysc2.env.environment import StepType
 from pysc2.env import sc2_env
 
-
-from dqn_agent import DQNAgent
-import utils
+from tf_dqn.pysc2_rl.dqn_agent import DQNAgent
+from tf_dqn.common import utils
 
 # Needed to satisfy something in pysc2, though I'm not actually using the flags
 FLAGS = flags.FLAGS

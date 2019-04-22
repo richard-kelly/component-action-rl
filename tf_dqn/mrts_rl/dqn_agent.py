@@ -4,8 +4,9 @@ import math
 import random
 import time
 
-from mrts_network import MRTSNetwork
-from latest_replay_mem import LatestReplayMemory
+from tf_dqn.mrts_rl.mrts_network import MRTSNetwork
+from tf_dqn.common.latest_replay_mem import LatestReplayMemory
+from tf_dqn.common.prioritized_replay_mem import PrioritizedReplayMemory
 
 
 class DQNAgent:

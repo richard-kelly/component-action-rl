@@ -1,11 +1,12 @@
 from smac.env import StarCraft2Env
+
 import numpy as np
 import tensorflow as tf
 import json
 import os
 import shutil
 
-from dqn_multi_agent import DQNAgent
+from tf_dqn.smac_rl.dqn_multi_agent import DQNAgent
 
 
 def main():

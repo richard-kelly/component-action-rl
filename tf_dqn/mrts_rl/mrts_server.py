@@ -5,9 +5,8 @@ import json
 import re
 import numpy as np
 import tensorflow as tf
-import random
 
-from dqn_agent import DQNAgent
+from tf_dqn.mrts_rl.dqn_agent import DQNAgent
 
 HOST = '127.0.0.1'
 PORT = 9898

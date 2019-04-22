@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import math
 
+
 class SC2Network:
     def __init__(
             self,

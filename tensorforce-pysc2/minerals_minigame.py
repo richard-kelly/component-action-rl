@@ -1,7 +1,6 @@
 import os
 import shutil
-import numpy as np
-import utils
+from common import utils
 import json
 
 from tensorforce.agents import Agent
