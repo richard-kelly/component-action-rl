@@ -94,7 +94,7 @@ def run_one_env(config, rename_if_duplicate=False, output_file=None):
     num_eps = 20
     last_n_ep_score = []
 
-    if output_file is not None:
+    if output_file is not None and not os.path.isfile(output_file):
         with open(output_file, 'a+') as f:
             f.write('Run_Name Max_Score Avg_Score Last_' + str(num_eps) + '_Score\n')
 
@@ -169,6 +169,8 @@ def main():
 
     if batch['use']:
         base_name = config['model_dir']
+        time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        summary_file_name = base_name + '/_' + time + '_batch_summary.txt'
         count = 0
         while True:
             count += 1
@@ -181,8 +183,7 @@ def main():
                 name += '_' + param + '_' + '{:.2e}'.format(config[param])
             config['model_dir'] = base_name + '/' + name
             print('****** Starting a new run in this batch: ' + name + ' ******')
-            time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-            run_one_env(config, rename_if_duplicate=True, output_file=base_name + '/_' + time + '_batch_summary.txt')
+            run_one_env(config, rename_if_duplicate=True, output_file=summary_file_name)
     else:
         run_one_env(config, rename_if_duplicate=False)
 
