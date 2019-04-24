@@ -356,6 +356,7 @@ def get_eta_category(eta):
     else:
         return 7
 
+
 async def handle_client(reader, writer):
     global budgets
     global conn_player

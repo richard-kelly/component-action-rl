@@ -2,16 +2,16 @@
     "run_model_no_training": false,
 
     "model_dir": "models/test",
-    "model_checkpoint_frequency": 20000,
+    "model_checkpoint_frequency": 50000,
     "model_checkpoint_max": 1,
     "model_checkpoint_every_n_hours": 24,
     "max_steps": 150000,
     "max_episodes": 0,
 
     "learning_rate": 5e-5,
-    "learning_rate_decay_method": "exponential",
+    "learning_rate_decay_method": "none",
     "learning_rate_decay_steps": 10000,
-    "learning_rate_decay_param": 0.75,
+    "learning_rate_decay_param": 1.0,
 
     "double_DQN": true,
     "dueling_network": true,
@@ -21,18 +21,18 @@
     "reg_scale": 1e-5,
 
     "update_frequency": 4,
-    "memory_size": 40000,
+    "memory_size": 1000000,
     "memory_burn_in": 5000,
     "target_update_frequency": 10000,
 
     "use_priority_experience_replay": true,
     "per_alpha": 0.6,
     "per_starting_beta": 0.4,
-    "per_beta_anneal_steps": 150000,
+    "per_beta_anneal_steps": 2000000,
 
     "initial_epsilon": 1.0,
     "final_epsilon": 0.1,
-    "decay_steps": 100000,
+    "decay_steps": 1000000,
     "decay_type": "linear",
 
     "debug_logging": false,

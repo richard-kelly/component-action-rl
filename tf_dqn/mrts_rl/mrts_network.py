@@ -734,9 +734,12 @@ class MRTSNetwork:
                 elif action == 5:
                     q_vals['param'][i] = np.where(params_for_attack, q_vals['param'][i], np.nan)
 
-            # make sure some unit_type is valid; if everything is NaN then it shouldn't be producing
+            # make sure all unit_types and params are valid for the nanargmax function
+            # if they're all NaN they won't actually be used.
             if np.all(np.isnan(q_vals['unit_type'][i])):
                 q_vals['unit_type'][i][0] = 1
+            if np.all(np.isnan(q_vals['param'][i])):
+                q_vals['param'][i][0] = 1
 
         # Now all invalid actions have had their corresponding q_val set to NaN
         # (excluding some components that won't be used for this action)
