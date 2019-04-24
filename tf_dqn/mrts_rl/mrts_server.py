@@ -1,4 +1,3 @@
-# Echo server program
 import os
 import asyncio
 import json
@@ -7,6 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 from tf_dqn.mrts_rl.dqn_agent import DQNAgent
+import tf_dqn.common.utils as utils
 
 HOST = '127.0.0.1'
 PORT = 9898
@@ -23,6 +23,7 @@ unit_types = None
 move_conflict_resolution_strategy = None
 
 rl_agent = None
+step = 0
 
 
 def get_conn_count():
@@ -33,10 +34,16 @@ def get_conn_count():
 
 def handle_game_over(winner, conn_num):
     global rl_agent
-    if winner == conn_player[conn_num]:
+    if winner == -1:
+        reward = 0
+        print('Connection', conn_num, ': GAME OVER - DRAW')
+    elif winner == conn_player[conn_num]:
+        reward = 1
         print('Connection', conn_num, ': GAME OVER - WON')
     else:
+        reward = -1
         print('Connection', conn_num, ': GAME OVER - LOST')
+    rl_agent.observe(terminal=True, reward=reward)
 
 
 def handle_unit_type_table(utt):
@@ -79,6 +86,7 @@ def handle_pre_game_analysis(state, ms, conn_num):
 def handle_get_action(state, player, conn_num):
     global conn_player
     global rl_agent
+    global step
     conn_player[conn_num] = player
     state_for_rl = {}
     # state:
@@ -118,25 +126,16 @@ def handle_get_action(state, player, conn_num):
     # resources is same for all bases belonging to a player, and equal to players[x]['resources']
     # convert to dict indexed by ID
     units = {}
+    friendly_unit_id_by_coordinates = {}
     for unit in state['pgs']['units']:
         units[unit['ID']] = unit
+        if player == unit['player']:
+            friendly_unit_id_by_coordinates[(unit['x'], unit['y'])] = unit['ID']
 
+    unit_type_names = ['Base', 'Barracks', 'Worker', 'Light', 'Heavy', 'Ranged', 'Resource']
     units_feature = np.zeros((map_size, map_size), dtype=np.int8)
     for _, unit in units.items():
-        if unit['type'] == 'Base':
-            units_feature[unit['y'], unit['x']] = 1
-        elif unit['type'] == 'Barracks':
-            units_feature[unit['y'], unit['x']] = 2
-        elif unit['type'] == 'Worker':
-            units_feature[unit['y'], unit['x']] = 3
-        elif unit['type'] == 'Light':
-            units_feature[unit['y'], unit['x']] = 4
-        elif unit['type'] == 'Heavy':
-            units_feature[unit['y'], unit['x']] = 5
-        elif unit['type'] == 'Ranged':
-            units_feature[unit['y'], unit['x']] = 6
-        elif unit['type'] == 'Resource':
-            units_feature[unit['y'], unit['x']] = 7
+        units_feature[unit['y'], unit['x']] = unit_type_names.index(unit['type']) + 1
     state_for_rl['units'] = units_feature
 
     # TODO: try other representations of health... normalized real number? thermometer encoding?
@@ -177,53 +176,33 @@ def handle_get_action(state, player, conn_num):
     current_actions = {}
     for ongoing_action in state['actions']:
         current_actions[ongoing_action['ID']] = ongoing_action
-    # action_durations = {0: None, 1: }
-    # for action in current_actions:
+        # for now mark any space where something is moving or producing as a "wall" so we won't try to use it
+        if ongoing_action['action']['type'] == 1 or ongoing_action['action']['type'] == 4:
+            param = ongoing_action['action']['parameter']
+            x = units[ongoing_action['ID']]['x']
+            y = units[ongoing_action['ID']]['y']
+            if param == 0:
+                # up
+                state_for_rl['terrain'][y - 1][x] = 1
+            elif param == 1:
+                # right
+                state_for_rl['terrain'][y][x + 1] = 1
+            elif param == 2:
+                # down
+                state_for_rl['terrain'][y + 1][x] = 1
+            elif param == 3:
+                # left
+                state_for_rl['terrain'][y][x - 1] = 1
+
 
     # TODO: add more information about current actions (type, target, etc.)
+
     eta_feature = np.zeros((map_size, map_size), dtype=np.int8)
     for ID, current_action in current_actions.items():
-        action = current_action['action']
-        time = current_action['time']
         unit = units[current_action['ID']]
-        time_elapsed = game_frame - time
-        if action['type'] == 0:
-            # no_op
-            action_duration = action['parameter']
-        elif action['type'] == 1:
-            # move
-            action_duration = unit_types[unit['type']]['moveTime']
-        elif action['type'] == 2:
-            # harvest
-            action_duration = unit_types[unit['type']]['harvestTime']
-        elif action['type'] == 3:
-            # return
-            action_duration = unit_types[unit['type']]['returnTime']
-        elif action['type'] == 4:
-            # produce
-            action_duration = unit_types[action['unitType']]['produceTime']
-        elif action['type'] == 5:
-            # attack
-            action_duration = unit_types[unit['type']]['attackTime']
-        else:
-            # error?
-            action_duration = time_elapsed
-
-        eta = action_duration - time_elapsed
-        if eta <= 5:
-            eta_feature[unit['y'], unit['x']] = 1
-        elif eta <= 10:
-            eta_feature[unit['y'], unit['x']] = 2
-        elif eta <= 25:
-            eta_feature[unit['y'], unit['x']] = 3
-        elif eta <= 50:
-            eta_feature[unit['y'], unit['x']] = 4
-        elif eta <= 80:
-            eta_feature[unit['y'], unit['x']] = 5
-        elif eta <= 120:
-            eta_feature[unit['y'], unit['x']] = 6
-        else:
-            eta_feature[unit['y'], unit['x']] = 7
+        eta = get_eta(game_frame, current_action, unit['type'])
+        eta_cat = get_eta_category(eta)
+        eta_feature[unit['y'], unit['x']] = eta_cat
     state_for_rl['eta'] = eta_feature
 
     resources_feature = np.zeros((map_size, map_size), dtype=np.int8)
@@ -248,14 +227,14 @@ def handle_get_action(state, player, conn_num):
 
     # An action for a turn is a list with actions for each unit: a dict with
     # "unitID": int,
-    #   "unitAction": {
+    # "unitAction": {
     #     "type":      int [one of 0 (none/wait), 1 (move), 2 (harvest), 3 (return), 4 (produce), 5 (attack_location)],
     #     // used for direction (of move, harvest, return, produce) and duration (wait)
     #     "parameter": int [one of -1 (none), 0 (up), 1 (right), 2 (down), 3 (left) OR any positive int for wait],
     #     "x":         int [x coordinate of attack],
     #     "y":         int [y coordinate of attack],
     #     "unitType":  str [the name of the type of unit to produce with a produce action]
-    #   }
+    # }
 
     # Actions have to have a target / be legal at the time they are issued.
     # So even though actions take time to complete, there has to be a target at the time an attack is issued,
@@ -267,29 +246,115 @@ def handle_get_action(state, player, conn_num):
 
     actions = []
 
-    # for _, unit in units.items():
-    #     if unit['player'] == player and unit['type'] == 'Worker' and unit['ID'] not in current_actions:
-    #         action = dict(
-    #             unitID=unit['ID'],
-    #             unitAction=dict(
-    #                 type=5,
-    #                 # parameter=random.randint(0, 5)
-    #                 parameter=2
-    #             )
-    #         )
-    #         actions.append(action)
+    friendly_units_without_actions = []
+    for _, unit_id in friendly_unit_id_by_coordinates.items():
+        if unit_id not in current_actions:
+            friendly_units_without_actions.append(unit_id)
 
-    # if game_frame % 10 == 0:
-    #     print('10')
+    while len(friendly_units_without_actions) > 0:
+        if step > 0:
+            rl_agent.observe(terminal=False, reward=0)
+        step += 1
+        action = rl_agent.act(state_for_rl)
 
+        mrts_action = {}
+        x, y = utils.flattened_to_grid(map_size, action['select'])
+        x_p, y_p = utils.flattened_to_grid(map_size, action['param'])
+        unit_id = friendly_unit_id_by_coordinates[(x, y)]
+        mrts_action['unitID'] = unit_id
 
-    if game_frame > 0:
-        rl_agent.observe(terminal=False, reward=0)
+        unit_action = {'type': int(action['type'])}
+        if unit_action['type'] == 0:
+            # no_op/wait; always wait for only one frame
+            unit_action['parameter'] = 1
+        elif 1 <= unit_action['type'] <= 4:
+            # one of move, harvest, return, produce
+            if y_p == y - 1:
+                # up
+                unit_action['parameter'] = 0
+            elif x_p == x + 1:
+                # right
+                unit_action['parameter'] = 1
+            elif y_p == y + 1:
+                # down
+                unit_action['parameter'] = 2
+            elif x_p == x - 1:
+                # left
+                unit_action['parameter'] = 3
+            else:
+                print('Invalid parameter for action type', action['type'])
+        else:
+            # attack
+            unit_action['parameter'] = -1
+            unit_action['x'] = int(x_p)
+            unit_action['y'] = int(y_p)
+        # handle produce
+        if unit_action['type'] == 4:
+            unit_action['unitType'] = unit_type_names[action['unit_type']]
 
-    action = rl_agent.act(state_for_rl)
+        if unit_action['type'] == 0 or unit_action['type'] == 4:
+            # mark spaces used for move or produce as a 'wall' so that it can't be chosen again
+            state_for_rl['terrain'][y_p][x_p] = 1
+
+        # modify state so that this unit is now doing an action
+        current_action = {'time': game_frame, 'action': unit_action}
+        unit = units[unit_id]
+        eta = get_eta(game_frame, current_action, unit['type'])
+        eta_cat = get_eta_category(eta)
+        state_for_rl['eta'][unit['y'], unit['x']] = eta_cat
+
+        mrts_action['unitAction'] = unit_action
+        actions.append(mrts_action)
+        friendly_units_without_actions.remove(unit_id)
 
     return json.dumps(actions)
 
+
+def get_eta(game_frame, current_action, unit_type):
+    action = current_action['action']
+    time = current_action['time']
+    time_elapsed = game_frame - time
+    if action['type'] == 0:
+        # no_op
+        action_duration = action['parameter']
+    elif action['type'] == 1:
+        # move
+        action_duration = unit_types[unit_type]['moveTime']
+    elif action['type'] == 2:
+        # harvest
+        action_duration = unit_types[unit_type]['harvestTime']
+    elif action['type'] == 3:
+        # return
+        action_duration = unit_types[unit_type]['returnTime']
+    elif action['type'] == 4:
+        # produce
+        action_duration = unit_types[action['unitType']]['produceTime']
+    elif action['type'] == 5:
+        # attack
+        action_duration = unit_types[unit_type]['attackTime']
+    else:
+        # error?
+        action_duration = time_elapsed
+
+    eta = action_duration - time_elapsed
+    return eta
+
+
+def get_eta_category(eta):
+    if eta <= 5:
+        return 1
+    elif eta <= 10:
+        return 2
+    elif eta <= 25:
+        return 3
+    elif eta <= 50:
+        return 4
+    elif eta <= 80:
+        return 5
+    elif eta <= 120:
+        return 6
+    else:
+        return 7
 
 async def handle_client(reader, writer):
     global budgets
@@ -340,7 +405,7 @@ def main():
     global rl_agent
     # TODO: for now just load the config once, no batches
     # load configuration
-    with open('pysc2_config.json', 'r') as fp:
+    with open('mrts_config.json', 'r') as fp:
         config = json.load(fp=fp)
 
     # save a copy of the configuration file being used for a run in the run's folder (first time only)
@@ -354,7 +419,7 @@ def main():
 
     with tf.Session() as sess:
         rl_agent = DQNAgent(sess, config, restore)
-
+        print('Ready to accept incoming connections')
         loop = asyncio.get_event_loop()
         loop.create_task(asyncio.start_server(handle_client, HOST, PORT))
         loop.run_forever()

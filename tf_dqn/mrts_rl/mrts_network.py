@@ -44,10 +44,12 @@ class MRTSNetwork:
         self._rewards = None
         self._next_states = None
         self._terminal = None
+        self._per_weights = None
 
         # the output operations
         self._q = None
         self._actions_selected_by_q = None
+        self._td_abs = None
         self._optimizer = None
         self.var_init = None
         self.saver = None
@@ -56,11 +58,12 @@ class MRTSNetwork:
         self._define_model()
 
     def _get_network(self, inputs):
-        # concat parts of input
-
-        terrain = inputs['terrain']
-
         # num_classes should be one more than actual, because it includes 0, which we ignore in the slice
+        terrain = tf.contrib.layers.one_hot_encoding(
+            labels=inputs['terrain'],
+            num_classes=2
+        )[:, :, :, 1:]
+
         units_one_hot = tf.contrib.layers.one_hot_encoding(
             labels=inputs['units'],
             num_classes=8
@@ -235,15 +238,20 @@ class MRTSNetwork:
                 dtype=tf.int32,
                 name='health'
             ),
-            resources=tf.placeholder(
+            players=tf.placeholder(
                 shape=[None, self._screen_size, self._screen_size],
                 dtype=tf.int32,
-                name='resources'
+                name='players'
             ),
             eta=tf.placeholder(
                 shape=[None, self._screen_size, self._screen_size],
                 dtype=tf.int32,
                 name='eta'
+            ),
+            resources=tf.placeholder(
+                shape=[None, self._screen_size, self._screen_size],
+                dtype=tf.int32,
+                name='resources'
             ),
             # available_resources=tf.placeholder(
             #     shape=[None, ],
@@ -274,8 +282,8 @@ class MRTSNetwork:
         return dict(
             select=tf.one_hot(actions['select'], self._screen_size * self._screen_size, 1.0, 0.0, name='select'),
             type=tf.one_hot(actions['type'], 6, 1.0, 0.0, name='type'),
-            param=tf.one_hot(actions['select_add'], self._screen_size * self._screen_size, 1.0, 0.0, name='param'),
-            unit_type=tf.one_hot(actions['queued'], 6, 1.0, 0.0, name='unit_type')
+            param=tf.one_hot(actions['param'], self._screen_size * self._screen_size, 1.0, 0.0, name='param'),
+            unit_type=tf.one_hot(actions['unit_type'], 6, 1.0, 0.0, name='unit_type')
         )
 
     def _define_model(self):
@@ -288,6 +296,7 @@ class MRTSNetwork:
             self._next_states = self._get_state_placeholder()
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
         self._terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='terminal_placeholder')
+        self._per_weights = tf.placeholder(shape=[None, ], dtype=tf.float32, name='per_weights_placeholder')
 
         # primary and target Q nets
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
@@ -359,6 +368,8 @@ class MRTSNetwork:
         # calculate losses (average of y compared to each component of prediction action)
         with tf.variable_scope('losses'):
             losses = []
+            td = []
+            num_components = self._rewards * 0
             for name in training_action_q:
                 # argument mask is scalar 1 if this argument is used for the transition action, 0 otherwise
                 argument_mask = tf.reduce_max(action_one_hot['type'] * argument_masks[name], axis=-1)
@@ -366,6 +377,8 @@ class MRTSNetwork:
                 y_masked = y * argument_mask
                 # we compare the q value of each component to the target y; y is masked if training q is masked
                 loss = tf.losses.huber_loss(training_action_q_masked, y_masked)
+                td.append(tf.abs(training_action_q_masked - y_masked))
+                num_components = num_components + argument_mask
                 losses.append(loss)
             # TODO: The following might make more sense as a sum instead of mean,
             #  but then probably the learning rate should come down
@@ -374,14 +387,13 @@ class MRTSNetwork:
             final_loss = training_losses + reg_loss
             tf.summary.scalar('training_loss', training_losses)
             tf.summary.scalar('regularization_loss', reg_loss)
+            self._td_abs = tf.reduce_sum(tf.stack(td, axis=1), axis=1) / num_components
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._learning_decay == 'exponential':
-            lr = tf.train.exponential_decay(self._learning_rate, self._global_step, self._learning_decay_steps,
-                                            self._learning_decay_factor)
+            lr = tf.train.exponential_decay(self._learning_rate, self._global_step, self._learning_decay_steps, self._learning_decay_factor)
         elif self._learning_decay == 'polynomial':
-            lr = tf.train.polynomial_decay(self._learning_rate, self._global_step, self._learning_decay_steps,
-                                           self._learning_decay_factor)
+            lr = tf.train.polynomial_decay(self._learning_rate, self._global_step, self._learning_decay_steps, self._learning_decay_factor)
         else:
             lr = self._learning_rate
         self._optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(final_loss)
@@ -440,7 +452,7 @@ class MRTSNetwork:
             feed_dict[self._states[name]] = np.expand_dims(state[name], axis=0)
         return sess.run([self._predict_summaries, self._q], feed_dict=feed_dict)
 
-    def train_batch(self, sess, global_step, states, actions, rewards, next_states, terminal):
+    def train_batch(self, sess, global_step, states, actions, rewards, next_states, terminal, weights):
         # need batch size to reshape actions
         batch_size = actions['type'].shape[0]
 
@@ -450,6 +462,11 @@ class MRTSNetwork:
             self._terminal: terminal,
             self._global_step: global_step
         }
+
+        if weights is not None:
+            feed_dict[self._per_weights] = weights
+        else:
+            feed_dict[self._per_weights] = np.ones(batch_size, dtype=np.float32)
 
         if self._double_dqn:
             q_next_feed_dict = {}
@@ -467,12 +484,12 @@ class MRTSNetwork:
         for name in actions:
             feed_dict[self._actions[name]] = actions[name].reshape(batch_size)
 
-        summary, _ = sess.run([self._train_summaries, self._optimizer], feed_dict=feed_dict)
+        summary, td_abs, _ = sess.run([self._train_summaries, self._td_abs, self._optimizer], feed_dict=feed_dict)
 
-        return summary
+        return summary, td_abs
 
     def _flattened_to_grid(self, elem):
-        # x, y
+        # returns in (x, y) order
         return elem % self._screen_size, elem // self._screen_size
 
     def _grid_to_flattened(self, tile):
@@ -519,7 +536,7 @@ class MRTSNetwork:
 
         # SELECT = unit that is doing the action
         # mask out tiles that don't have our units
-        q_vals['select'] = np.where(states['player'].reshape((batch, n * n)) == 1, q_vals['select'], np.nan)
+        q_vals['select'] = np.where(states['players'].reshape((batch, n * n)) == 1, q_vals['select'], np.nan)
         # mask out tiles with units that already have actions
         q_vals['select'] = np.where(states['eta'].reshape((batch, n * n)) == 0, q_vals['select'], np.nan)
         actions = dict(select=np.nanargmax(q_vals['select'], axis=1))
@@ -623,7 +640,7 @@ class MRTSNetwork:
                     # check for enemy units
                     x_n, y_n = neighbour
                     flat_n = self._grid_to_flattened(neighbour)
-                    if states['player'][i][y_n, x_n] != 2:
+                    if states['players'][i][y_n, x_n] != 2:
                         continue
                     # this is a valid neighbour with enemy unit
                     params_for_attack[flat_n] = 1
@@ -652,7 +669,7 @@ class MRTSNetwork:
                     for neighbour in neighbours:
                         x_n, y_n = neighbour
                         flat_n = self._grid_to_flattened(neighbour)
-                        if not (states['units'][i][y_n, x_n] == 1 and states['player'][i][y_n, x_n] == 1):
+                        if not (states['units'][i][y_n, x_n] == 1 and states['players'][i][y_n, x_n] == 1):
                             continue
                         # this is a valid base to return to
                         params_for_return[flat_n] = 1
@@ -702,7 +719,7 @@ class MRTSNetwork:
                     # check for enemy units
                     x_n, y_n = target
                     flat_n = self._grid_to_flattened(target)
-                    if states['player'][i][y_n, x_n] != 2:
+                    if states['players'][i][y_n, x_n] != 2:
                         continue
                     # this is a valid tile with enemy unit
                     params_for_attack[flat_n] = 1
@@ -717,10 +734,15 @@ class MRTSNetwork:
                 elif action == 5:
                     q_vals['param'][i] = np.where(params_for_attack, q_vals['param'][i], np.nan)
 
-        # Now all invalid actions have had their corresponding q_val set to NAN
+            # make sure some unit_type is valid; if everything is NaN then it shouldn't be producing
+            if np.all(np.isnan(q_vals['unit_type'][i])):
+                q_vals['unit_type'][i][0] = 1
+
+        # Now all invalid actions have had their corresponding q_val set to NaN
         # (excluding some components that won't be used for this action)
         actions['type'] = np.nanargmax(q_vals['type'], axis=1)
         actions['param'] = np.nanargmax(q_vals['param'], axis=1)
         actions['unit_type'] = np.nanargmax(q_vals['unit_type'], axis=1)
+
         return actions
 

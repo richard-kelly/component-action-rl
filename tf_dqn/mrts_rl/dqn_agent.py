@@ -3,6 +3,7 @@ import numpy as np
 import math
 import random
 import time
+import copy
 
 from tf_dqn.mrts_rl.mrts_network import MRTSNetwork
 from tf_dqn.common.latest_replay_mem import LatestReplayMemory
@@ -39,7 +40,16 @@ class DQNAgent:
         else:
             self._decay = 0.0
 
-        self._memory = LatestReplayMemory(self._config['memory_size'])
+        if self._config['use_priority_experience_replay']:
+            self._memory = PrioritizedReplayMemory(
+                self._config['memory_size'],
+                config['per_alpha'],
+                config['per_starting_beta'],
+                config['per_beta_anneal_steps']
+            )
+        else:
+            self._memory = LatestReplayMemory(self._config['memory_size'])
+
         self._network = MRTSNetwork(
             self._config['double_DQN'],
             self._config['dueling_network'],
@@ -91,7 +101,9 @@ class DQNAgent:
             # at end of episode store memory sample with None for next state
             # set last_state to None so that on next act() we know it is beginning of episode
             if terminal:
-                self._memory.add_sample(self._last_state, self._last_action, reward, None, True)
+                # Next state doesn't matter for a terminal experience, but when it's sampled later the validation
+                # acts on the entire batch, and it's nice to have a valid state in there rather than all zeros.
+                self._memory.add_sample(self._last_state, self._last_action, reward, self._last_state, True)
                 self._last_state = None
                 self._episodes += 1
 
@@ -126,7 +138,8 @@ class DQNAgent:
                 # only start changing epsilon once memory has reached minimum size
                 self._update_epsilon()
 
-            self._last_state = state
+            # make a copy of the state because we may alter it outside this scope, but before it is stored in replay mem
+            self._last_state = copy.deepcopy(state)
             self._last_action = action
 
             self._memory_start_size_reached = self._memory.get_size() >= self._config['memory_burn_in']
@@ -166,13 +179,22 @@ class DQNAgent:
 
         # states stored in memory as tuple (state, action, reward, next_state)
         # next_state=None if state is terminal
-        states, actions, rewards, next_states, is_terminal = self._memory.sample(self._config['batch_size'])
+        if self._config['use_priority_experience_replay']:
+            states, actions, rewards, next_states, is_terminal, weights = self._memory.sample(
+                self._config['batch_size'])
+        else:
+            states, actions, rewards, next_states, is_terminal = self._memory.sample(self._config['batch_size'])
+            weights = None
 
         self._times['sample'] += time.time() - last_time
         last_time = time.time()
 
-        summary = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states, is_terminal)
+        summary, priorities = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states,
+                                                        is_terminal, weights)
         self._writer.add_summary(summary, self._steps)
+
+        if self._config['use_priority_experience_replay']:
+            self._memory.update_priorities_of_last_sample(priorities)
 
         self._times['train_batch'] += time.time() - last_time
         self._time_count += 1

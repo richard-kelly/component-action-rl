@@ -25,6 +25,11 @@
     "memory_burn_in": 5000,
     "target_update_frequency": 10000,
 
+    "use_priority_experience_replay": true,
+    "per_alpha": 0.6,
+    "per_starting_beta": 0.4,
+    "per_beta_anneal_steps": 150000,
+
     "initial_epsilon": 1.0,
     "final_epsilon": 0.1,
     "decay_steps": 100000,
@@ -34,6 +39,6 @@
     "log_frequency": 200,
 
     "env": {
-
+        "screen_size": 8
     }
 }

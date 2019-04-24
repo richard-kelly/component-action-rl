@@ -2,6 +2,7 @@ import numpy as np
 import random
 import math
 
+
 def one_hot_encode_int_array(array, num_cats):
     shape = tuple(list(array.shape) + [num_cats])
     one_hot = np.zeros(shape)
@@ -30,6 +31,15 @@ def one_hot_encode_int_arrays(*args):
 
 def log_uniform(a, b, base=10):
     return a ** ((((math.log(b, base) / math.log(a, base)) - 1) * random.random()) + 1)
+
+
+def flattened_to_grid(screen_size, elem):
+    # returns in (x, y) order
+    return elem % screen_size, elem // screen_size
+
+
+def grid_to_flattened(screen_size, tile):
+    return tile[1] * screen_size + tile[0]
 
 
 def main():
