@@ -109,7 +109,7 @@ class MRTSNetwork:
             kernel_size=3,
             padding='same',
             name='conv1_spatial',
-            activation=tf.nn.relu,
+            activation=tf.nn.leaky_relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
         )
 
@@ -119,7 +119,7 @@ class MRTSNetwork:
             kernel_size=3,
             padding='same',
             name='conv2_spatial',
-            activation=tf.nn.relu,
+            activation=tf.nn.leaky_relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
         )
 
@@ -157,14 +157,14 @@ class MRTSNetwork:
             fc_value1 = tf.layers.dense(
                 non_spatial_flat,
                 1024,
-                activation=tf.nn.relu,
+                activation=tf.nn.leaky_relu,
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                 name='fc_value_1'
             )
             fc_value2 = tf.layers.dense(
                 fc_value1,
                 512,
-                activation=tf.nn.relu,
+                activation=tf.nn.leaky_relu,
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                 name='fc_value_2'
             )
@@ -179,7 +179,7 @@ class MRTSNetwork:
         fc_non_spatial_1 = tf.layers.dense(
             non_spatial_flat,
             1024,
-            activation=tf.nn.relu,
+            activation=tf.nn.leaky_relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
             name='fc_non_spatial_1'
         )
@@ -187,7 +187,7 @@ class MRTSNetwork:
         fc_non_spatial_2 = tf.layers.dense(
             fc_non_spatial_1,
             512,
-            activation=tf.nn.relu,
+            activation=tf.nn.leaky_relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
             name='fc_non_spatial_2'
         )
