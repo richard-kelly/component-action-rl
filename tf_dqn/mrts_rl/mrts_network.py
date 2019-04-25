@@ -86,7 +86,7 @@ class MRTSNetwork:
 
         resources_one_hot = tf.contrib.layers.one_hot_encoding(
             labels=inputs['resources'],
-            num_classes=9
+            num_classes=8
         )[:, :, :, 1:]
 
         screen = tf.concat(

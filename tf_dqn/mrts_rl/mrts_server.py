@@ -123,7 +123,7 @@ def handle_get_action(state, player, conn_num):
     # list, each unit is dict with string "type" and
     # ints "ID", "player", "x", "y", "resources", "hitpoints"
     # ID here is a unique id for each unit in the game
-    # resources is same for all bases belonging to a player, and equal to players[x]['resources']
+    # resources is resources that a worker is carrying or that are in a resource patch
     # convert to dict indexed by ID
     units = {}
     friendly_unit_id_by_coordinates = {}
@@ -141,16 +141,7 @@ def handle_get_action(state, player, conn_num):
     # TODO: try other representations of health... normalized real number? thermometer encoding?
     health_feature = np.zeros((map_size, map_size), dtype=np.int8)
     for _, unit in units.items():
-        if unit['hitpoints'] == 1:
-            health_feature[unit['y'], unit['x']] = 1
-        elif unit['hitpoints'] == 2:
-            health_feature[unit['y'], unit['x']] = 2
-        elif unit['hitpoints'] == 3:
-            health_feature[unit['y'], unit['x']] = 3
-        elif unit['hitpoints'] == 4:
-            health_feature[unit['y'], unit['x']] = 4
-        elif unit['hitpoints'] >= 5:
-            health_feature[unit['y'], unit['x']] = 5
+        health_feature[unit['y'], unit['x']] = get_health_category(unit['hitpoints'])
     state_for_rl['health'] = health_feature
 
     # switch player ownership feature based on which player we are
@@ -194,7 +185,6 @@ def handle_get_action(state, player, conn_num):
                 # left
                 state_for_rl['terrain'][y][x - 1] = 1
 
-
     # TODO: add more information about current actions (type, target, etc.)
 
     eta_feature = np.zeros((map_size, map_size), dtype=np.int8)
@@ -207,22 +197,7 @@ def handle_get_action(state, player, conn_num):
 
     resources_feature = np.zeros((map_size, map_size), dtype=np.int8)
     for _, unit in units.items():
-        if unit['resources'] == 1:
-            resources_feature[unit['y'], unit['x']] = 1
-        elif unit['resources'] == 2:
-            resources_feature[unit['y'], unit['x']] = 2
-        elif unit['resources'] == 2:
-            resources_feature[unit['y'], unit['x']] = 3
-        elif unit['resources'] == 3:
-            resources_feature[unit['y'], unit['x']] = 4
-        elif unit['resources'] == 4:
-            resources_feature[unit['y'], unit['x']] = 5
-        elif unit['resources'] == 5:
-            resources_feature[unit['y'], unit['x']] = 6
-        elif unit['resources'] <= 9:
-            resources_feature[unit['y'], unit['x']] = 7
-        elif unit['resources'] >= 10:
-            resources_feature[unit['y'], unit['x']] = 8
+        resources_feature[unit['y'], unit['x']] = get_resource_category(unit['resources'])
     state_for_rl['resources'] = resources_feature
 
     # An action for a turn is a list with actions for each unit: a dict with
@@ -355,6 +330,22 @@ def get_eta_category(eta):
         return 6
     else:
         return 7
+
+
+def get_health_category(hitpoints):
+    if hitpoints <= 4:
+        return hitpoints
+    else:
+        return 5
+
+
+def get_resource_category(resources):
+        if resources <= 5:
+            return resources
+        elif resources <= 9:
+            return 6
+        else:
+            return 7
 
 
 async def handle_client(reader, writer):
