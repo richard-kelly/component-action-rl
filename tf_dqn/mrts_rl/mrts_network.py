@@ -103,25 +103,28 @@ class MRTSNetwork:
         )
 
         # begin shared conv layers
-        conv1_spatial = tf.layers.conv2d(
-            inputs=screen,
-            filters=64,
-            kernel_size=3,
-            padding='same',
-            name='conv1_spatial',
-            activation=tf.nn.leaky_relu,
-            kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
-        )
+        conv1_spatial = self._get_conv_concat_module(screen, 'conv1', [16, 16, 16, 16], [1, 3, 5, 7])
+        conv2_spatial = self._get_conv_concat_module(conv1_spatial, 'conv2', [16, 16, 16, 16], [1, 3, 5, 7])
 
-        conv2_spatial = tf.layers.conv2d(
-            inputs=conv1_spatial,
-            filters=32,
-            kernel_size=3,
-            padding='same',
-            name='conv2_spatial',
-            activation=tf.nn.leaky_relu,
-            kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
-        )
+        # conv1_spatial = tf.layers.conv2d(
+        #     inputs=screen,
+        #     filters=64,
+        #     kernel_size=5,
+        #     padding='same',
+        #     name='conv1_spatial',
+        #     activation=tf.nn.leaky_relu,
+        #     kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
+        # )
+        #
+        # conv2_spatial = tf.layers.conv2d(
+        #     inputs=conv1_spatial,
+        #     filters=32,
+        #     kernel_size=3,
+        #     padding='same',
+        #     name='conv2_spatial',
+        #     activation=tf.nn.leaky_relu,
+        #     kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
+        # )
 
         with tf.variable_scope('spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
@@ -132,7 +135,7 @@ class MRTSNetwork:
         # MUST flatten conv or pooling layers before sending to dense layer
         non_spatial_flat = tf.reshape(
             conv2_spatial,
-            shape=[-1, int(self._screen_size * self._screen_size * 32)],
+            shape=[-1, int(self._screen_size * self._screen_size * 64)],
             name='non_spatial_flat'
         )
 
@@ -269,6 +272,20 @@ class MRTSNetwork:
                 name='player_resources'
             )
         )
+
+    def _get_conv_concat_module(self, previous_spatial_layer, base_name, filter_nums, kernel_sizes):
+        conv_layers = []
+        for i in range(len(filter_nums)):
+            conv_layers.append(tf.layers.conv2d(
+                inputs=previous_spatial_layer,
+                filters=filter_nums[i],
+                kernel_size=kernel_sizes[i],
+                padding='same',
+                name=base_name + '_' + str(kernel_sizes[i]) + 'x' + str(kernel_sizes[i]),
+                activation=tf.nn.leaky_relu,
+                kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
+            ))
+        return tf.concat(conv_layers, axis=-1)
 
     def _get_action_placeholders(self):
         # number of options for some function args hard coded here
