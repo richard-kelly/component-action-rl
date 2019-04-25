@@ -266,9 +266,14 @@ def handle_get_action(state, player, conn_num):
             unit_action['parameter'] = -1
             unit_action['x'] = int(x_p)
             unit_action['y'] = int(y_p)
+
         # handle produce
         if unit_action['type'] == 4:
             unit_action['unitType'] = unit_type_names[action['unit_type']]
+            # reduce available resources so that we don't try to over build in a turn
+            cost = unit_types[unit_action['unitType']]['cost']
+            state_for_rl['available_resources'] -= cost
+            state_for_rl['player_resources'] = get_player_resources_array(our_resources - cost, their_resources)
 
         if unit_action['type'] == 0 or unit_action['type'] == 4:
             # mark spaces used for move or produce as a 'wall' so that it can't be chosen again
