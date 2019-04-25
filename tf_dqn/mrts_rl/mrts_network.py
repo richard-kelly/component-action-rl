@@ -136,6 +136,16 @@ class MRTSNetwork:
             name='non_spatial_flat'
         )
 
+        # add in categorical data not included in spatial data
+        non_spatial_flat = tf.concat(
+            [
+                non_spatial_flat,
+                tf.cast(inputs['player_resources'], dtype=tf.float32)
+            ],
+            axis=1,
+            name='non_spatial_concat'
+        )
+
         if self._dueling:
             with tf.variable_scope('dueling_gradient_scale'):
                 # scale the gradients entering last shared layer, as in original Dueling DQN paper
@@ -253,11 +263,11 @@ class MRTSNetwork:
                 dtype=tf.int32,
                 name='resources'
             ),
-            # available_resources=tf.placeholder(
-            #     shape=[None, ],
-            #     dtype=tf.int32,
-            #     name='available_resources'
-            # )
+            player_resources=tf.placeholder(
+                shape=[None, 16],
+                dtype=tf.int32,
+                name='player_resources'
+            )
         )
 
     def _get_action_placeholders(self):

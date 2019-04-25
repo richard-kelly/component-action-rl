@@ -118,7 +118,10 @@ def handle_get_action(state, player, conn_num):
     # list, each player is dict with ints "ID" and "resources"
     # the ID here is the same as player parameter to this function and "player" in unit object below
     players = state['pgs']['players']
-    state_for_rl['available_resources'] = np.array(players[player]['resources'], dtype=np.int32)
+    our_resources = players[player]['resources']
+    their_resources = players[(player + 1) % 2]['resources']
+    state_for_rl['available_resources'] = np.array(our_resources, dtype=np.int32)
+    state_for_rl['player_resources'] = get_player_resources_array(our_resources, their_resources)
 
     # list, each unit is dict with string "type" and
     # ints "ID", "player", "x", "y", "resources", "hitpoints"
@@ -346,6 +349,17 @@ def get_resource_category(resources):
             return 6
         else:
             return 7
+
+
+def get_player_resources_array(self_resources, enemy_resources):
+    # should be highest cat number plus one (includes zero)
+    num_cats = 8
+    self_cat = get_resource_category(self_resources)
+    enemy_cat = get_resource_category(enemy_resources)
+    array = np.zeros(2 * num_cats, dtype=np.int32)
+    array[self_cat] = 1
+    array[num_cats + enemy_cat] = 1
+    return array
 
 
 async def handle_client(reader, writer):
