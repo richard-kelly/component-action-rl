@@ -403,6 +403,7 @@ async def handle_client(reader, writer):
         elif re.search("^gameOver", decoded):
             handle_game_over(int(decoded.split()[1]), count)
             writer.write(b"ack\n")
+            writer.close()
         else:
             print('Message type not recognized!')
             print(decoded)
