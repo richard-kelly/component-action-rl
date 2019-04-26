@@ -103,8 +103,9 @@ class MRTSNetwork:
         )
 
         # begin shared conv layers
-        conv1_spatial = self._get_conv_concat_module(screen, 'conv1', [16, 16, 16, 16], [1, 3, 5, 7])
-        conv2_spatial = self._get_conv_concat_module(conv1_spatial, 'conv2', [16, 16, 16, 16], [1, 3, 5, 7])
+        conv_spatial = self._get_conv_concat_module(screen, 'conv1', [16, 16, 16, 16], [1, 3, 5, 7])
+        conv_spatial = self._get_conv_concat_module(conv_spatial, 'conv2', [16, 16, 16, 16], [1, 3, 5, 7])
+        conv_spatial = self._get_conv_concat_module(conv_spatial, 'conv3', [16, 16, 16, 16], [1, 3, 5, 7])
 
         # conv1_spatial = tf.layers.conv2d(
         #     inputs=screen,
@@ -130,11 +131,11 @@ class MRTSNetwork:
             # scale because multiple action component streams are meeting here
             # TODO: come up with better scaling based on which action components are used in training.
             scale = 1 / math.sqrt(2)
-            conv2_spatial = (1 - scale) * tf.stop_gradient(conv2_spatial) + scale * conv2_spatial
+            conv_spatial = (1 - scale) * tf.stop_gradient(conv_spatial) + scale * conv_spatial
 
         # MUST flatten conv or pooling layers before sending to dense layer
         non_spatial_flat = tf.reshape(
-            conv2_spatial,
+            conv_spatial,
             shape=[-1, int(self._screen_size * self._screen_size * 64)],
             name='non_spatial_flat'
         )
@@ -202,7 +203,7 @@ class MRTSNetwork:
             fc_non_spatial_2 = (1 - scale) * tf.stop_gradient(fc_non_spatial_2) + scale * fc_non_spatial_2
 
         select = tf.layers.conv2d(
-            inputs=conv2_spatial,
+            inputs=conv_spatial,
             filters=1,
             kernel_size=1,
             padding='same',
@@ -210,7 +211,7 @@ class MRTSNetwork:
         )
 
         param = tf.layers.conv2d(
-            inputs=conv2_spatial,
+            inputs=conv_spatial,
             filters=1,
             kernel_size=1,
             padding='same',
