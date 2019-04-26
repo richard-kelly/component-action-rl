@@ -187,7 +187,14 @@ def handle_get_action(state, player, conn_num):
             elif param == 3:
                 # left
                 state_for_rl['terrain'][y][x - 1] = 1
-
+        # resources are not deducted until a unit is finished being built.
+        # so we deduct them to make sure we don't overbuild
+        # TODO: do for enemy as well?
+        if ongoing_action['action']['type'] == 4 and units[ongoing_action['ID']]['player'] == player:
+            cost = unit_types[ongoing_action['action']['unitType']]['cost']
+            state_for_rl['available_resources'] -= cost
+            our_resources -= cost
+            state_for_rl['player_resources'] = get_player_resources_array(our_resources, their_resources)
     # TODO: add more information about current actions (type, target, etc.)
 
     eta_feature = np.zeros((map_size, map_size), dtype=np.int8)
@@ -273,7 +280,8 @@ def handle_get_action(state, player, conn_num):
             # reduce available resources so that we don't try to over build in a turn
             cost = unit_types[unit_action['unitType']]['cost']
             state_for_rl['available_resources'] -= cost
-            state_for_rl['player_resources'] = get_player_resources_array(our_resources - cost, their_resources)
+            our_resources -= cost
+            state_for_rl['player_resources'] = get_player_resources_array(our_resources, their_resources)
 
         if unit_action['type'] == 0 or unit_action['type'] == 4:
             # mark spaces used for move or produce as a 'wall' so that it can't be chosen again
