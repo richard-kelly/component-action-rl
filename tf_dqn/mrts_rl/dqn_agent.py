@@ -117,11 +117,13 @@ class DQNAgent:
                 self._last_action.pop(game_num, None)
                 self._last_state.pop(game_num, None)
 
-    def act(self, game_num, state):
+    def act(self, game_num, state, remember):
         action = self._choose_action(state)
-        self._steps += 1
 
-        if not self._config['run_model_no_training']:
+        if remember:
+            self._steps += 1
+
+        if not self._config['run_model_no_training'] and remember:
             if self._last_state[game_num] is not None:
                 self._memory.add_sample(self._last_state[game_num], self._last_action[game_num], self._last_reward[game_num], state, False)
 

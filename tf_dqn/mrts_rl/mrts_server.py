@@ -2,6 +2,7 @@ import os
 import asyncio
 import json
 import re
+import random
 import numpy as np
 import tensorflow as tf
 
@@ -22,6 +23,7 @@ budgets = None
 unit_types = None
 move_conflict_resolution_strategy = None
 unit_type_names = ['Base', 'Barracks', 'Worker', 'Light', 'Heavy', 'Ranged', 'Resource']
+one_obs_per_turn = False
 
 rl_agent = None
 step = 0
@@ -225,11 +227,17 @@ def handle_get_action(state, player, conn_num):
         if unit_id not in current_actions:
             friendly_units_without_actions.append(unit_id)
 
-    while len(friendly_units_without_actions) > 0:
+    num_actions = len(friendly_units_without_actions)
+    if num_actions == 0:
+        return json.dumps(actions)
+    remembered_action = random.randrange(num_actions)
+    for i in range(num_actions):
+        remember = i == remembered_action or not one_obs_per_turn
         if step > 0:
-            rl_agent.observe(conn_num, terminal=False, reward=0)
+            if remember:
+                rl_agent.observe(conn_num, terminal=False, reward=0)
         step += 1
-        action = rl_agent.act(conn_num, state_for_rl)
+        action = rl_agent.act(conn_num, state_for_rl, remember)
 
         mrts_action = {}
         x, y = utils.flattened_to_grid(map_size, action['select'])
@@ -429,10 +437,12 @@ async def handle_client(reader, writer):
 
 def main():
     global rl_agent
+    global one_obs_per_turn
     # TODO: for now just load the config once, no batches
     # load configuration
     with open('mrts_config.json', 'r') as fp:
         config = json.load(fp=fp)
+    one_obs_per_turn = config['env']['one_obs_per_turn']
 
     # save a copy of the configuration file being used for a run in the run's folder (first time only)
     restore = True

@@ -39,6 +39,7 @@
     "log_frequency": 200,
 
     "env": {
-        "screen_size": 8
+        "screen_size": 8,
+        "one_obs_per_turn": false
     }
 }
