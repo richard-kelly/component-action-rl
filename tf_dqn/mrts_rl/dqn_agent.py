@@ -14,6 +14,7 @@ class DQNAgent:
     def __init__(self, sess, config, restore):
         self._steps = 0
         self._episodes = 0
+        self._average_episode_score = 0
         self._episode_score = {}
         self._memory_start_size_reached = False
         self._last_state = {}
@@ -34,7 +35,7 @@ class DQNAgent:
         else:
             self._epsilon = 0.0
         if self._config['decay_type'] == "exponential":
-            self._decay = math.exp(math.log(self._config['final_epsilon'] / self._config['initial_epsilon'])/self._config['decay_steps'])
+            self._decay = math.exp(math.log(self._config['final_epsilon'] / self._config['initial_epsilon']) / self._config['decay_steps'])
         elif self._config['decay_type'] == "linear":
             self._decay = (self._config['initial_epsilon'] - self._config['final_epsilon']) / self._config['decay_steps']
         else:
@@ -98,8 +99,9 @@ class DQNAgent:
     def observe(self, game_num, terminal=False, reward=0):
         self._episode_score[game_num] += reward
         if terminal:
+            self._average_episode_score = (self._average_episode_score * self._episodes + self._episode_score[game_num]) / (self._episodes + 1)
             epsilon = self._epsilon if self._memory_start_size_reached else 1.0
-            summary = self._network.episode_summary(self._sess, self._episode_score[game_num], epsilon)
+            summary = self._network.episode_summary(self._sess, self._episode_score[game_num], self._average_episode_score, epsilon)
             self._writer.add_summary(summary, self._steps)
 
         if not self._config['run_model_no_training']:
