@@ -21,6 +21,7 @@ conn_player = {}
 budgets = None
 unit_types = None
 move_conflict_resolution_strategy = None
+unit_type_names = ['Base', 'Barracks', 'Worker', 'Light', 'Heavy', 'Ranged', 'Resource']
 
 rl_agent = None
 step = 0
@@ -76,10 +77,10 @@ def handle_unit_type_table(utt):
         unit_types[unit_type['name']] = unit_type
 
 
-def handle_pre_game_analysis(state, ms, conn_num):
+def handle_pre_game_analysis(unused_state, ms, conn_num):
     # nothing to do with this for now
     # ms is the number of ms we have to exit this function (and send back a response, which happens elsewhere)
-    # state is the staring state of the game (t=0)
+    # state is the starting state of the game (t=0)
     print('Connection', conn_num, ': Received pre-game analysis state for', ms, 'ms.')
 
 
@@ -113,15 +114,12 @@ def handle_get_action(state, player, conn_num):
     terrain = np.array([int(i) for i in state['pgs']['terrain']], dtype=np.int8).reshape((map_h, map_w))
     # for now pad non-square maps with 'walls' in the bottom and right
     terrain = np.pad(terrain, ((0, map_size - map_h), (0, map_size - map_w)), 'constant', constant_values=1)
-    state_for_rl['terrain'] = terrain
 
     # list, each player is dict with ints "ID" and "resources"
     # the ID here is the same as player parameter to this function and "player" in unit object below
     players = state['pgs']['players']
     our_resources = players[player]['resources']
     their_resources = players[(player + 1) % 2]['resources']
-    state_for_rl['available_resources'] = np.array(our_resources, dtype=np.int32)
-    state_for_rl['player_resources'] = get_player_resources_array(our_resources, their_resources)
 
     # list, each unit is dict with string "type" and
     # ints "ID", "player", "x", "y", "resources", "hitpoints"
@@ -135,7 +133,33 @@ def handle_get_action(state, player, conn_num):
         if player == unit['player']:
             friendly_unit_id_by_coordinates[(unit['x'], unit['y'])] = unit['ID']
 
-    unit_type_names = ['Base', 'Barracks', 'Worker', 'Light', 'Heavy', 'Ranged', 'Resource']
+    # actions ongoing for both players. A list with dicts:
+    #   "ID":       int [unit ID],
+    #   "time":     int [game frame when the action was given]
+    #   "action":   {type, parameter, unitType, etc.]
+    # convert to dict indexed by ID
+    current_actions = {}
+    for ongoing_action in state['actions']:
+        current_actions[ongoing_action['ID']] = ongoing_action
+
+    state_for_rl['terrain'] = terrain
+    state_for_rl['available_resources'] = np.array(our_resources, dtype=np.int32)
+    state_for_rl['player_resources'] = get_players_resources_array(our_resources, their_resources)
+    state_for_rl['players'] = get_players_feature(units, map_size, player)
+
+    eta_feature = np.zeros((map_size, map_size), dtype=np.int8)
+    for ID, current_action in current_actions.items():
+        unit = units[current_action['ID']]
+        eta = get_eta(game_frame, current_action, unit['type'])
+        eta_cat = get_eta_category(eta)
+        eta_feature[unit['y'], unit['x']] = eta_cat
+    state_for_rl['eta'] = eta_feature
+
+    resources_feature = np.zeros((map_size, map_size), dtype=np.int8)
+    for _, unit in units.items():
+        resources_feature[unit['y'], unit['x']] = get_resource_category(unit['resources'])
+    state_for_rl['resources'] = resources_feature
+
     units_feature = np.zeros((map_size, map_size), dtype=np.int8)
     for _, unit in units.items():
         units_feature[unit['y'], unit['x']] = unit_type_names.index(unit['type']) + 1
@@ -147,29 +171,7 @@ def handle_get_action(state, player, conn_num):
         health_feature[unit['y'], unit['x']] = get_health_category(unit['hitpoints'])
     state_for_rl['health'] = health_feature
 
-    # switch player ownership feature based on which player we are
-    players_feature = np.zeros((map_size, map_size), dtype=np.int8)
-    for _, unit in units.items():
-        if unit['player'] == 0:
-            if player == 0:
-                players_feature[unit['y'], unit['x']] = 1
-            else:
-                players_feature[unit['y'], unit['x']] = 2
-        elif unit['player'] == 1:
-            if player == 0:
-                players_feature[unit['y'], unit['x']] = 2
-            else:
-                players_feature[unit['y'], unit['x']] = 1
-    state_for_rl['players'] = players_feature
-
-    # actions ongoing for both players. A list with dicts:
-    #   "ID":       int [unit ID],
-    #   "time":     int [game frame when the action was given]
-    #   "action":   {type, parameter, unitType, etc.]
-    # convert to dict indexed by ID
-    current_actions = {}
-    for ongoing_action in state['actions']:
-        current_actions[ongoing_action['ID']] = ongoing_action
+    for _, ongoing_action in current_actions.items():
         # for now mark any space where something is moving or producing as a "wall" so we won't try to use it
         if ongoing_action['action']['type'] == 1 or ongoing_action['action']['type'] == 4:
             param = ongoing_action['action']['parameter']
@@ -194,21 +196,8 @@ def handle_get_action(state, player, conn_num):
             cost = unit_types[ongoing_action['action']['unitType']]['cost']
             state_for_rl['available_resources'] -= cost
             our_resources -= cost
-            state_for_rl['player_resources'] = get_player_resources_array(our_resources, their_resources)
+            state_for_rl['player_resources'] = get_players_resources_array(our_resources, their_resources)
     # TODO: add more information about current actions (type, target, etc.)
-
-    eta_feature = np.zeros((map_size, map_size), dtype=np.int8)
-    for ID, current_action in current_actions.items():
-        unit = units[current_action['ID']]
-        eta = get_eta(game_frame, current_action, unit['type'])
-        eta_cat = get_eta_category(eta)
-        eta_feature[unit['y'], unit['x']] = eta_cat
-    state_for_rl['eta'] = eta_feature
-
-    resources_feature = np.zeros((map_size, map_size), dtype=np.int8)
-    for _, unit in units.items():
-        resources_feature[unit['y'], unit['x']] = get_resource_category(unit['resources'])
-    state_for_rl['resources'] = resources_feature
 
     # An action for a turn is a list with actions for each unit: a dict with
     # "unitID": int,
@@ -281,7 +270,7 @@ def handle_get_action(state, player, conn_num):
             cost = unit_types[unit_action['unitType']]['cost']
             state_for_rl['available_resources'] -= cost
             our_resources -= cost
-            state_for_rl['player_resources'] = get_player_resources_array(our_resources, their_resources)
+            state_for_rl['player_resources'] = get_players_resources_array(our_resources, their_resources)
 
         if unit_action['type'] == 0 or unit_action['type'] == 4:
             # mark spaces used for move or produce as a 'wall' so that it can't be chosen again
@@ -300,6 +289,22 @@ def handle_get_action(state, player, conn_num):
 
     return json.dumps(actions)
 
+
+def get_players_feature(units, map_size, player):
+    # switch player ownership feature based on which player we are
+    players_feature = np.zeros((map_size, map_size), dtype=np.int8)
+    for _, unit in units.items():
+        if unit['player'] == 0:
+            if player == 0:
+                players_feature[unit['y'], unit['x']] = 1
+            else:
+                players_feature[unit['y'], unit['x']] = 2
+        elif unit['player'] == 1:
+            if player == 0:
+                players_feature[unit['y'], unit['x']] = 2
+            else:
+                players_feature[unit['y'], unit['x']] = 1
+    return players_feature
 
 def get_eta(game_frame, current_action, unit_type):
     action = current_action['action']
@@ -364,7 +369,7 @@ def get_resource_category(resources):
             return 7
 
 
-def get_player_resources_array(self_resources, enemy_resources):
+def get_players_resources_array(self_resources, enemy_resources):
     # should be highest cat number plus one (includes zero)
     num_cats = 8
     self_cat = get_resource_category(self_resources)
