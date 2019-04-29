@@ -44,7 +44,7 @@ def handle_game_over(winner, conn_num):
     else:
         reward = -1
         print('Connection', conn_num, ': GAME OVER - LOST')
-    rl_agent.observe(terminal=True, reward=reward)
+    rl_agent.observe(conn_num, terminal=True, reward=reward)
 
 
 def handle_unit_type_table(utt):
@@ -81,7 +81,7 @@ def handle_pre_game_analysis(unused_state, ms, conn_num):
     # nothing to do with this for now
     # ms is the number of ms we have to exit this function (and send back a response, which happens elsewhere)
     # state is the starting state of the game (t=0)
-    rl_agent.reset()
+    rl_agent.reset(conn_num)
     print('Connection', conn_num, ': Received pre-game analysis state for', ms, 'ms.')
 
 
@@ -227,9 +227,9 @@ def handle_get_action(state, player, conn_num):
 
     while len(friendly_units_without_actions) > 0:
         if step > 0:
-            rl_agent.observe(terminal=False, reward=0)
+            rl_agent.observe(conn_num, terminal=False, reward=0)
         step += 1
-        action = rl_agent.act(state_for_rl)
+        action = rl_agent.act(conn_num, state_for_rl)
 
         mrts_action = {}
         x, y = utils.flattened_to_grid(map_size, action['select'])
@@ -305,6 +305,7 @@ def get_players_feature(units, map_size, player):
             else:
                 players_feature[unit['y'], unit['x']] = 1
     return players_feature
+
 
 def get_eta(game_frame, current_action, unit_type):
     action = current_action['action']

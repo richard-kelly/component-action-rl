@@ -14,11 +14,11 @@ class DQNAgent:
     def __init__(self, sess, config, restore):
         self._steps = 0
         self._episodes = 0
-        self._episode_score = 0
+        self._episode_score = {}
         self._memory_start_size_reached = False
-        self._last_state = None
-        self._last_reward = None
-        self._last_action = None
+        self._last_state = {}
+        self._last_reward = {}
+        self._last_action = {}
         self._sample_action = None
         self._config = config
 
@@ -88,36 +88,42 @@ class DQNAgent:
             self._sess.run(self._network.var_init)
             self._network.update_target_q_net(self._sess)
 
-    def reset(self):
+    def reset(self, game_num):
         # new episode; just ensures that we don't store a transition across episodes when there is no terminal obs
-        self._last_state = None
+        self._last_state[game_num] = None
+        self._last_action[game_num] = None
+        self._last_reward[game_num] = None
+        self._episode_score[game_num] = 0
 
-    def observe(self, terminal=False, reward=0):
-        self._episode_score += reward
+    def observe(self, game_num, terminal=False, reward=0):
+        self._episode_score[game_num] += reward
         if terminal:
             epsilon = self._epsilon if self._memory_start_size_reached else 1.0
-            summary = self._network.episode_summary(self._sess, self._episode_score, epsilon)
+            summary = self._network.episode_summary(self._sess, self._episode_score[game_num], epsilon)
             self._writer.add_summary(summary, self._steps)
-            self._episode_score = 0
 
         if not self._config['run_model_no_training']:
-            self._last_reward = reward
+            self._last_reward[game_num] = reward
             # at end of episode store memory sample with None for next state
             # set last_state to None so that on next act() we know it is beginning of episode
             if terminal:
                 # Next state doesn't matter for a terminal experience, but when it's sampled later the validation
                 # acts on the entire batch, and it's nice to have a valid state in there rather than all zeros.
-                self._memory.add_sample(self._last_state, self._last_action, reward, self._last_state, True)
-                self._last_state = None
+                self._memory.add_sample(self._last_state[game_num], self._last_action[game_num], reward, self._last_state[game_num], True)
                 self._episodes += 1
 
-    def act(self, state):
+                self._episode_score.pop(game_num, None)
+                self._last_reward.pop(game_num, None)
+                self._last_action.pop(game_num, None)
+                self._last_state.pop(game_num, None)
+
+    def act(self, game_num, state):
         action = self._choose_action(state)
         self._steps += 1
 
         if not self._config['run_model_no_training']:
-            if self._last_state is not None:
-                self._memory.add_sample(self._last_state, self._last_action, self._last_reward, state, False)
+            if self._last_state[game_num] is not None:
+                self._memory.add_sample(self._last_state[game_num], self._last_action[game_num], self._last_reward[game_num], state, False)
 
             # update target network parameters occasionally
             if self._steps % self._config['target_update_frequency'] == 0:
@@ -143,8 +149,8 @@ class DQNAgent:
                 self._update_epsilon()
 
             # make a copy of the state because we may alter it outside this scope, but before it is stored in replay mem
-            self._last_state = copy.deepcopy(state)
-            self._last_action = action
+            self._last_state[game_num] = copy.deepcopy(state)
+            self._last_action[game_num] = action
 
             self._memory_start_size_reached = self._memory.get_size() >= self._config['memory_burn_in']
 
@@ -184,8 +190,7 @@ class DQNAgent:
         # states stored in memory as tuple (state, action, reward, next_state)
         # next_state=None if state is terminal
         if self._config['use_priority_experience_replay']:
-            states, actions, rewards, next_states, is_terminal, weights = self._memory.sample(
-                self._config['batch_size'])
+            states, actions, rewards, next_states, is_terminal, weights = self._memory.sample(self._config['batch_size'])
         else:
             states, actions, rewards, next_states, is_terminal = self._memory.sample(self._config['batch_size'])
             weights = None
@@ -193,8 +198,7 @@ class DQNAgent:
         self._times['sample'] += time.time() - last_time
         last_time = time.time()
 
-        summary, priorities = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states,
-                                                        is_terminal, weights)
+        summary, priorities = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states, is_terminal, weights)
         self._writer.add_summary(summary, self._steps)
 
         if self._config['use_priority_experience_replay']:
