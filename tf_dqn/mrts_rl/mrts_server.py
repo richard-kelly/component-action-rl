@@ -81,12 +81,12 @@ def handle_pre_game_analysis(unused_state, ms, conn_num):
     # nothing to do with this for now
     # ms is the number of ms we have to exit this function (and send back a response, which happens elsewhere)
     # state is the starting state of the game (t=0)
+    rl_agent.reset()
     print('Connection', conn_num, ': Received pre-game analysis state for', ms, 'ms.')
 
 
 def handle_get_action(state, player, conn_num):
     global conn_player
-    global rl_agent
     global step
     conn_player[conn_num] = player
     state_for_rl = {}

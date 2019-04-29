@@ -88,6 +88,10 @@ class DQNAgent:
             self._sess.run(self._network.var_init)
             self._network.update_target_q_net(self._sess)
 
+    def reset(self):
+        # new episode; just ensures that we don't store a transition across episodes when there is no terminal obs
+        self._last_state = None
+
     def observe(self, terminal=False, reward=0):
         self._episode_score += reward
         if terminal:
