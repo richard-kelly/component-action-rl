@@ -83,7 +83,6 @@ def handle_pre_game_analysis(unused_state, ms, conn_num):
     # nothing to do with this for now
     # ms is the number of ms we have to exit this function (and send back a response, which happens elsewhere)
     # state is the starting state of the game (t=0)
-    rl_agent.reset(conn_num)
     print('Connection', conn_num, ': Received pre-game analysis state for', ms, 'ms.')
 
 
@@ -95,6 +94,8 @@ def handle_get_action(state, player, conn_num):
     # state:
     #   map (0, 0) is top left
     game_frame = state['time']
+    if game_frame == 0:
+        rl_agent.reset(conn_num)
     map_w = state['pgs']['width']
     map_h = state['pgs']['height']
     biggest = max([map_w, map_h])

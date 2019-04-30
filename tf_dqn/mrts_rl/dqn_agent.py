@@ -16,7 +16,7 @@ class DQNAgent:
         self._episodes = 0
         self._average_episode_score = 0
         self._episode_score = {}
-        self._memory_start_size_reached = False
+        self._memory_start_size_reached = config['inference_only']
         self._last_state = {}
         self._last_reward = {}
         self._last_action = {}
@@ -30,10 +30,7 @@ class DQNAgent:
         self._time_count = 0
 
         # initialize epsilon
-        if not self._config['run_model_no_training']:
-            self._epsilon = self._config['initial_epsilon']
-        else:
-            self._epsilon = 0.0
+        self._epsilon = self._config['initial_epsilon']
         if self._config['decay_type'] == "exponential":
             self._decay = math.exp(math.log(self._config['final_epsilon'] / self._config['initial_epsilon']) / self._config['decay_steps'])
         elif self._config['decay_type'] == "linear":
@@ -104,7 +101,7 @@ class DQNAgent:
             summary = self._network.episode_summary(self._sess, self._episode_score[game_num], self._average_episode_score, epsilon)
             self._writer.add_summary(summary, self._steps)
 
-        if not self._config['run_model_no_training']:
+        if not self._config['inference_only']:
             self._last_reward[game_num] = reward
             # at end of episode store memory sample with None for next state
             # set last_state to None so that on next act() we know it is beginning of episode
@@ -125,7 +122,7 @@ class DQNAgent:
         if remember:
             self._steps += 1
 
-        if not self._config['run_model_no_training'] and remember:
+        if not self._config['inference_only'] and remember:
             if self._last_state[game_num] is not None:
                 self._memory.add_sample(self._last_state[game_num], self._last_action[game_num], self._last_reward[game_num], state, False)
 
@@ -171,7 +168,10 @@ class DQNAgent:
         for name in state:
             # adds a new dimension of length 1 at the beginning (the batch size)
             state_for_validation[name] = np.expand_dims(state[name], axis=0)
-        if not self._config['run_model_no_training'] and (not self._memory_start_size_reached or random.random() < self._epsilon):
+
+        epsilon = self._config['inference_only_epsilon'] if self._config['inference_only'] else self._epsilon
+
+        if not self._memory_start_size_reached or random.random() < epsilon:
             if self._sample_action is None:
                 # store one action to serve as action specification
                 _, self._sample_action = self._network.predict_one(self._sess, state)

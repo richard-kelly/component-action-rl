@@ -1,5 +1,6 @@
 {
-    "run_model_no_training": false,
+    "inference_only": false,
+    "inference_only_epsilon": 0.1,
 
     "model_dir": "models/test",
     "model_checkpoint_frequency": 50000,
