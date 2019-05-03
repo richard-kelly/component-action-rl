@@ -1,5 +1,7 @@
 import os
 import asyncio
+import subprocess
+import datetime
 import json
 import re
 import random
@@ -26,7 +28,14 @@ unit_type_names = ['Base', 'Barracks', 'Worker', 'Light', 'Heavy', 'Ranged', 'Re
 one_obs_per_turn = False
 
 rl_agent = None
+config = None
+loop = None
 step = 0
+
+num_eps = 200
+max_ep_score = None
+all_ep_scores = []
+last_n_ep_score = []
 
 
 def get_conn_count():
@@ -391,6 +400,7 @@ def get_players_resources_array(self_resources, enemy_resources):
 
 
 async def handle_client(reader, writer):
+    # loop.stop()
     global budgets
     global conn_player
     count = get_conn_count()
@@ -404,6 +414,12 @@ async def handle_client(reader, writer):
             break
         if not data:
             break
+
+        # check if time to quit this training session
+        if not (config['max_steps'] == 0 or rl_agent.get_global_step() < config['max_steps']):
+            loop.stop()
+            break
+
         decoded = data.decode('utf-8')
         # decide what to do based on first word
         if re.search("^budget", decoded):
@@ -438,28 +454,117 @@ async def handle_client(reader, writer):
 
 def main():
     global rl_agent
+    global loop
     global one_obs_per_turn
+    global config
     # TODO: for now just load the config once, no batches
     # load configuration
     with open('mrts_config.json', 'r') as fp:
         config = json.load(fp=fp)
     one_obs_per_turn = config['env']['one_obs_per_turn']
 
-    # save a copy of the configuration file being used for a run in the run's folder (first time only)
-    restore = True
-    if not os.path.exists(config['model_dir']):
-        restore = False
-    if not restore:
-        os.makedirs(config['model_dir'])
-        with open(config['model_dir'] + '/config.json', 'w+') as fp:
-            fp.write(json.dumps(config, indent=4))
+    # load batch config file
+    with open('batch.json', 'r') as fp:
+        batch = json.load(fp=fp)
 
-    with tf.Session() as sess:
-        rl_agent = DQNAgent(sess, config, restore)
-        print('Ready to accept incoming connections')
-        loop = asyncio.get_event_loop()
-        loop.create_task(asyncio.start_server(handle_client, HOST, PORT))
-        loop.run_forever()
+    if batch['use']:
+        base_name = config['model_dir']
+        time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        output_file = base_name + '/_' + time + '_batch_summary.txt'
+
+        if not os.path.exists(base_name):
+            os.mkdir(base_name)
+
+        if not os.path.isfile(output_file):
+            with open(output_file, 'a+') as f:
+                f.write('Run_Name Max_Score Avg_Score Last_' + str(num_eps) + '_Score\n')
+        count = 0
+        while True:
+            count += 1
+            name = str(count)
+            for param in batch['log_random']:
+                config[param] = utils.log_uniform(batch['log_random'][param]['min'], batch['log_random'][param]['max'])
+                name += '_' + param + '_' + '{:.2e}'.format(config[param])
+            for param in batch['random']:
+                config[param] = random.uniform(batch['random'][param]['min'], batch['random'][param]['max'])
+                name += '_' + param + '_' + '{:.2e}'.format(config[param])
+            config['model_dir'] = base_name + '/' + name
+            print('****** Starting a new run in this batch: ' + name + ' ******')
+            # run_one_env(config, rename_if_duplicate=True, output_file=summary_file_name)
+            # save a copy of the configuration file being used for a run in the run's folder (first time only)
+
+            if os.path.exists(config['model_dir']):
+                time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+                config['model_dir'] = config['model_dir'] + '_' + time
+
+            os.makedirs(config['model_dir'])
+            with open(config['model_dir'] + '/config.json', 'w+') as fp:
+                fp.write(json.dumps(config, indent=4))
+
+            tf.reset_default_graph()
+            with tf.Session() as sess:
+                rl_agent = DQNAgent(sess, config, restore=False)
+                print('RL agent ready.')
+
+                # start env
+                env_config = config['env']
+                num_maps = 0
+                maps = []
+                for map in os.listdir(env_config['map_folder']):
+                    num_maps += 1
+                    maps.append(env_config['map_folder'] + '/' + map)
+                # TODO: work out correct formula for iterations
+                iterations = 10000
+                args = [
+                    "java",
+                    "-jar",
+                    "microrts.jar",
+                    env_config['unit_type_table'],
+                    env_config['selected_ai'],
+                    str(iterations),
+                    str(env_config['max_game_length']),
+                    str(env_config['time_budget']),
+                    str(env_config['pre_analysis_budget']),
+                    'true' if env_config['full_observability'] else 'false',
+                    'true' if env_config['store_traces'] else 'false',
+                    str(len(env_config['opponents']))
+                ]
+                args += env_config['opponents'] + [str(num_maps)] + maps
+
+                # env = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                # stdout, stderr = env.communicate()
+                # print(stdout)
+                env = subprocess.Popen(args, stdout=None, stderr=None)
+                print('Environment started, about to start the loop')
+
+                loop = asyncio.get_event_loop()
+                server = asyncio.start_server(handle_client, HOST, PORT, reuse_address=True)
+                loop.create_task(server)
+                # loop.create_task(asyncio.start_server(handle_client, HOST, PORT))
+                loop.run_forever()
+
+                # loop exits once enough episodes or steps have passed
+                print('Attempting to end run', count)
+                server.close()
+                env.kill()
+                # loop.close()
+
+    else:
+        # save a copy of the configuration file being used for a run in the run's folder (first time only)
+        restore = True
+        if not os.path.exists(config['model_dir']):
+            restore = False
+        if not restore:
+            os.makedirs(config['model_dir'])
+            with open(config['model_dir'] + '/config.json', 'w+') as fp:
+                fp.write(json.dumps(config, indent=4))
+
+        with tf.Session() as sess:
+            rl_agent = DQNAgent(sess, config, restore)
+            print('Ready to accept incoming connections')
+            loop = asyncio.get_event_loop()
+            loop.create_task(asyncio.start_server(handle_client, HOST, PORT))
+            loop.run_forever()
 
 
 if __name__ == '__main__':

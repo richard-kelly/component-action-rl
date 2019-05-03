@@ -41,6 +41,26 @@
 
     "env": {
         "screen_size": 8,
-        "one_obs_per_turn": false
+        "one_obs_per_turn": true,
+
+        "unit_type_table": "Finetuned-Both",
+        "selected_ai": "SocketAI",
+        "max_game_length": 3000,
+        "time_budget": 1000,
+        "pre_analysis_budget": 1000,
+        "full_observability": true,
+        "store_traces": false,
+        "opponents": [
+            "RandomBiasedAI",
+            "WorkerRush",
+            "LightRush",
+            "HeavyRush",
+            "RangedRush",
+            "WorkerDefense",
+            "LightDefense",
+            "HeavyDefense",
+            "RangedDefense"
+        ],
+        "map_folder": "C:/libraries/microrts/maps/8x8"
     }
 }
