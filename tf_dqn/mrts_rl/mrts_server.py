@@ -32,6 +32,7 @@ config = None
 loop = None
 step = 0
 
+output_file = None
 num_eps = 200
 max_ep_score = None
 all_ep_scores = []
@@ -46,6 +47,7 @@ def get_conn_count():
 
 def handle_game_over(winner, conn_num):
     global rl_agent
+    global all_ep_scores, last_n_ep_score, max_ep_score
     if winner == -1:
         reward = 0
         print('Connection', conn_num, ': GAME OVER - DRAW')
@@ -55,6 +57,13 @@ def handle_game_over(winner, conn_num):
     else:
         reward = -1
         print('Connection', conn_num, ': GAME OVER - LOST')
+
+    if len(last_n_ep_score) == num_eps:
+        last_n_ep_score.pop(0)
+    last_n_ep_score.append(reward)
+    all_ep_scores.append(reward)
+    if max_ep_score is None or reward > max_ep_score:
+        max_ep_score = reward
     rl_agent.observe(conn_num, terminal=True, reward=reward)
 
 
@@ -400,7 +409,6 @@ def get_players_resources_array(self_resources, enemy_resources):
 
 
 async def handle_client(reader, writer):
-    # loop.stop()
     global budgets
     global conn_player
     count = get_conn_count()
@@ -417,6 +425,10 @@ async def handle_client(reader, writer):
 
         # check if time to quit this training session
         if not (config['max_steps'] == 0 or rl_agent.get_global_step() < config['max_steps']):
+            with open(output_file, 'a+') as f:
+                avg_last = sum(last_n_ep_score) / len(last_n_ep_score)
+                avg = sum(all_ep_scores) / len(all_ep_scores)
+                f.write(config['model_dir'] + ' ' + str(max_ep_score) + ' ' + str(avg) + ' ' + str(avg_last) + '\n')
             loop.stop()
             break
 
@@ -457,6 +469,8 @@ def main():
     global loop
     global one_obs_per_turn
     global config
+    global output_file
+    global all_ep_scores, last_n_ep_score, max_ep_score
     # TODO: for now just load the config once, no batches
     # load configuration
     with open('mrts_config.json', 'r') as fp:
@@ -480,6 +494,10 @@ def main():
                 f.write('Run_Name Max_Score Avg_Score Last_' + str(num_eps) + '_Score\n')
         count = 0
         while True:
+            max_ep_score = -1
+            all_ep_scores = []
+            last_n_ep_score = []
+
             count += 1
             name = str(count)
             for param in batch['log_random']:

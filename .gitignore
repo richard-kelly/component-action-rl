@@ -19,3 +19,4 @@ tensorforce-pysc2/__pycache__/
 tensorforce-pysc2/models/
 tf_dqn/mrts_rl/__pycache__/
 tf_dqn/mrts_rl/models/
+tf_dqn/mrts_rl/microrts/
