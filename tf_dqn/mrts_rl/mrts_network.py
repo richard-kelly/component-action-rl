@@ -45,6 +45,7 @@ class MRTSNetwork:
         self._next_states = None
         self._terminal = None
         self._per_weights = None
+        self._training = None
 
         # the output operations
         self._q = None
@@ -104,8 +105,11 @@ class MRTSNetwork:
 
         # begin shared conv layers
         conv_spatial = self._get_conv_concat_module(screen, 'conv1', [16, 16, 16, 16], [1, 3, 5, 7])
+        conv_spatial = tf.layers.batch_normalization(conv_spatial, training=self._training)
         conv_spatial = self._get_conv_concat_module(conv_spatial, 'conv2', [16, 16, 16, 16], [1, 3, 5, 7])
+        conv_spatial = tf.layers.batch_normalization(conv_spatial, training=self._training)
         conv_spatial = self._get_conv_concat_module(conv_spatial, 'conv3', [16, 16, 16, 16], [1, 3, 5, 7])
+        conv_spatial = tf.layers.batch_normalization(conv_spatial, training=self._training)
 
         # conv1_spatial = tf.layers.conv2d(
         #     inputs=screen,
@@ -165,6 +169,7 @@ class MRTSNetwork:
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                 name='fc_value_1'
             )
+            fc_value1 = tf.layers.batch_normalization(fc_value1, training=self._training)
             fc_value2 = tf.layers.dense(
                 fc_value1,
                 512,
@@ -172,6 +177,7 @@ class MRTSNetwork:
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                 name='fc_value_2'
             )
+            fc_value2 = tf.layers.batch_normalization(fc_value2, training=self._training)
             value = tf.layers.dense(
                 fc_value2,
                 1,
@@ -179,6 +185,7 @@ class MRTSNetwork:
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                 name='value'
             )
+            value = tf.layers.batch_normalization(value, training=self._training)
 
         fc_non_spatial_1 = tf.layers.dense(
             non_spatial_flat,
@@ -187,6 +194,7 @@ class MRTSNetwork:
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
             name='fc_non_spatial_1'
         )
+        fc_non_spatial_1 = tf.layers.batch_normalization(fc_non_spatial_1, training=self._training)
 
         fc_non_spatial_2 = tf.layers.dense(
             fc_non_spatial_1,
@@ -195,6 +203,7 @@ class MRTSNetwork:
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
             name='fc_non_spatial_2'
         )
+        fc_non_spatial_2 = tf.layers.batch_normalization(fc_non_spatial_2, training=self._training)
 
         with tf.variable_scope('non_spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
@@ -325,6 +334,7 @@ class MRTSNetwork:
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
         self._terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='terminal_placeholder')
         self._per_weights = tf.placeholder(shape=[None, ], dtype=tf.float32, name='per_weights_placeholder')
+        self._training = tf.placeholder(shape=[], dtype=tf.bool, name='training_placeholder')
 
         # primary and target Q nets
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
@@ -424,7 +434,12 @@ class MRTSNetwork:
             lr = tf.train.polynomial_decay(self._learning_rate, self._global_step, self._learning_decay_steps, self._learning_decay_factor)
         else:
             lr = self._learning_rate
+
+        # must run this op to do batch norm
+        self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+
         self._optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(final_loss)
+        self._optimizer = tf.group([self._optimizer, self._update_ops])
 
         # tensorboard summaries
         self._train_summaries = tf.summary.merge_all(scope='losses')
@@ -477,7 +492,7 @@ class MRTSNetwork:
         sess.run([v_t.assign(v) for v_t, v in zip(self._q_target_vars, self._q_vars)])
 
     def predict_one(self, sess, state):
-        feed_dict = {}
+        feed_dict = {self._training: False}
         for name in self._states:
             # newaxis adds a new dimension of length 1 at the beginning (the batch size)
             feed_dict[self._states[name]] = np.expand_dims(state[name], axis=0)
@@ -491,7 +506,8 @@ class MRTSNetwork:
         feed_dict = {
             self._rewards: rewards,
             self._terminal: terminal,
-            self._global_step: global_step
+            self._global_step: global_step,
+            self._training: True
         }
 
         if weights is not None:
@@ -500,7 +516,7 @@ class MRTSNetwork:
             feed_dict[self._per_weights] = np.ones(batch_size, dtype=np.float32)
 
         if self._double_dqn:
-            q_next_feed_dict = {}
+            q_next_feed_dict = {self._training: False}
             for name in self._states:
                 q_next_feed_dict[self._states[name]] = next_states[name]
             q_next = sess.run(self._q, feed_dict=q_next_feed_dict)

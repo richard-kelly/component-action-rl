@@ -47,6 +47,7 @@ class SC2Network:
         self._next_states = None
         self._terminal = None
         self._per_weights = None
+        self._training = None
 
         # the output operations
         self._q = None
@@ -81,6 +82,7 @@ class SC2Network:
             name='conv1_spatial',
             activation=tf.nn.relu
         )
+        conv1_spatial = tf.layers.batch_normalization(conv1_spatial, training=self._training)
 
         conv2_spatial = tf.layers.conv2d(
             inputs=conv1_spatial,
@@ -90,6 +92,7 @@ class SC2Network:
             name='conv2_spatial',
             activation=tf.nn.relu
         )
+        conv2_spatial = tf.layers.batch_normalization(conv2_spatial, training=self._training)
 
         with tf.variable_scope('spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
@@ -128,6 +131,7 @@ class SC2Network:
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                 name='fc_value_1'
             )
+            fc_value1 = tf.layers.batch_normalization(fc_value1, training=self._training)
             fc_value2 = tf.layers.dense(
                 fc_value1,
                 1024,
@@ -135,6 +139,7 @@ class SC2Network:
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                 name='fc_value_2'
             )
+            fc_value2 = tf.layers.batch_normalization(fc_value2, training=self._training)
             value = tf.layers.dense(
                 fc_value2,
                 1,
@@ -142,6 +147,7 @@ class SC2Network:
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                 name='value'
             )
+            value = tf.layers.batch_normalization(value, training=self._training)
 
         fc_non_spatial_1 = tf.layers.dense(
             non_spatial_flat,
@@ -150,6 +156,7 @@ class SC2Network:
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
             name='fc_non_spatial_1'
         )
+        fc_non_spatial_1 = tf.layers.batch_normalization(fc_non_spatial_1, training=self._training)
 
         fc_non_spatial_2 = tf.layers.dense(
             fc_non_spatial_1,
@@ -158,6 +165,7 @@ class SC2Network:
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
             name='fc_non_spatial_2'
         )
+        fc_non_spatial_2 = tf.layers.batch_normalization(fc_non_spatial_2, training=self._training)
 
         with tf.variable_scope('non_spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
@@ -380,7 +388,12 @@ class SC2Network:
             lr = tf.train.polynomial_decay(self._learning_rate, self._global_step, self._learning_decay_steps, self._learning_decay_factor)
         else:
             lr = self._learning_rate
+
+        # must run this op to do batch norm
+        self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+
         self._optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(final_loss)
+        self._optimizer = tf.group([self._optimizer, self._update_ops])
 
         # tensorboard summaries
         self._train_summaries = tf.summary.merge_all(scope='losses')
@@ -430,7 +443,7 @@ class SC2Network:
         sess.run([v_t.assign(v) for v_t, v in zip(self._q_target_vars, self._q_vars)])
 
     def predict_one(self, sess, state):
-        feed_dict = {}
+        feed_dict = {self._training: False}
         for name in self._states:
             # newaxis adds a new dimension of length 1 at the beginning (the batch size)
             feed_dict[self._states[name]] = np.expand_dims(state[name], axis=0)
@@ -444,7 +457,8 @@ class SC2Network:
         feed_dict = {
             self._rewards: rewards,
             self._terminal: terminal,
-            self._global_step: global_step
+            self._global_step: global_step,
+            self._training: True
         }
 
         if weights is not None:
@@ -453,7 +467,7 @@ class SC2Network:
             feed_dict[self._per_weights] = np.ones(batch_size, dtype=np.float32)
 
         if self._double_dqn:
-            actions_next_feed_dict = {}
+            actions_next_feed_dict = {self._training: False}
             for name in self._states:
                 actions_next_feed_dict[self._states[name]] = next_states[name]
             actions_next = sess.run(self._actions_selected_by_q, feed_dict=actions_next_feed_dict)
