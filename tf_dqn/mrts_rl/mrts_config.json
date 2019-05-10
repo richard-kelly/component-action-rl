@@ -1,4 +1,5 @@
 {
+    "server_only_no_env": false,
     "inference_only": false,
     "inference_only_epsilon": 0.1,
 

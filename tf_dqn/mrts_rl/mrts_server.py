@@ -518,7 +518,7 @@ def get_env(env_config):
     return subprocess.Popen(args, stdout=None, stderr=None)
 
 
-def run_one_env(config, rename_if_duplicate=False):
+def run_one_env(config, rename_if_duplicate=False, server_only=False):
     global rl_agent, loop, env, eval_mode
     global all_ep_scores, last_n_ep_score, max_ep_score
 
@@ -548,7 +548,8 @@ def run_one_env(config, rename_if_duplicate=False):
         eval_mode = not config['self_play']
 
         # start env
-        env = get_env(config['env'])
+        if not server_only:
+            env = get_env(config['env'])
         print('Environment started, about to start the loop')
 
         loop = asyncio.get_event_loop()
@@ -558,7 +559,8 @@ def run_one_env(config, rename_if_duplicate=False):
 
         # loop exits once enough episodes or steps have passed
         server.close()
-        env.kill()
+        if not server_only:
+            env.kill()
 
 
 def main():
@@ -601,7 +603,11 @@ def main():
             print('****** Starting a new run in this batch: ' + name + ' ******')
             run_one_env(config, rename_if_duplicate=True)
     else:
-        run_one_env(config, rename_if_duplicate=False)
+        if config['server_only_no_env']:
+            # run just the server and don't start a mrts tournament
+            run_one_env(config, rename_if_duplicate=False, server_only=True)
+        else:
+            run_one_env(config, rename_if_duplicate=False)
 
 
 if __name__ == '__main__':
