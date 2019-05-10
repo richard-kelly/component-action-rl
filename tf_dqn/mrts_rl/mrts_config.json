@@ -1,4 +1,5 @@
 {
+    "server_only_no_env": false,
     "inference_only": false,
     "inference_only_epsilon": 0.1,
 
@@ -40,6 +41,27 @@
     "log_frequency": 200,
 
     "env": {
+        "screen_size": 8,
+        "one_obs_per_turn": true,
+
+        "unit_type_table": "Finetuned-Both",
+        "selected_ai": "SocketAI",
+        "max_game_length": 3000,
+        "time_budget": 1000,
+        "pre_analysis_budget": 1000,
+        "full_observability": true,
+        "store_traces": false,
+        "opponents": [
+            "SocketAI"
+        ],
+        "map_folder": "C:/libraries/microrts/maps/8x8"
+    },
+
+    "self_play": true,
+    "self_play_eval_freq_steps": 25000,
+    "self_play_eval_duration_steps": 5000,
+    "self_play_epsilon": 0.05,
+    "self_play_eval_env": {
         "screen_size": 8,
         "one_obs_per_turn": true,
 

@@ -30,7 +30,10 @@ one_obs_per_turn = False
 rl_agent = None
 config = None
 loop = None
+env = None
 step = 0
+eval_step = 0
+eval_mode = False
 
 output_file = None
 num_eps = 200
@@ -48,6 +51,7 @@ def get_conn_count():
 def handle_game_over(winner, conn_num):
     global rl_agent
     global all_ep_scores, last_n_ep_score, max_ep_score
+
     if winner == -1:
         reward = 0
         print('Connection', conn_num, ': GAME OVER - DRAW')
@@ -64,7 +68,7 @@ def handle_game_over(winner, conn_num):
     all_ep_scores.append(reward)
     if max_ep_score is None or reward > max_ep_score:
         max_ep_score = reward
-    rl_agent.observe(conn_num, terminal=True, reward=reward)
+    rl_agent.observe(conn_num, terminal=True, reward=reward, record=eval_mode)
 
 
 def handle_unit_type_table(utt):
@@ -106,7 +110,10 @@ def handle_pre_game_analysis(unused_state, ms, conn_num):
 
 def handle_get_action(state, player, conn_num):
     global conn_player
-    global step
+    global step, eval_step
+
+    eval_step += 1
+
     conn_player[conn_num] = player
     state_for_rl = {}
     # state:
@@ -256,7 +263,11 @@ def handle_get_action(state, player, conn_num):
             if remember:
                 rl_agent.observe(conn_num, terminal=False, reward=0)
         step += 1
-        action = rl_agent.act(conn_num, state_for_rl, remember)
+        if eval_mode:
+            force_eps = config['self_play_epsilon']
+        else:
+            force_eps = None
+        action = rl_agent.act(conn_num, state_for_rl, remember, force_eps)
 
         mrts_action = {}
         x, y = utils.flattened_to_grid(map_size, action['select'])
@@ -411,6 +422,7 @@ def get_players_resources_array(self_resources, enemy_resources):
 async def handle_client(reader, writer):
     global budgets
     global conn_player
+    global env, eval_step, eval_mode
     count = get_conn_count()
     print('Connection', count, ': OPEN')
     writer.write(b"ack\n")
@@ -425,12 +437,27 @@ async def handle_client(reader, writer):
 
         # check if time to quit this training session
         if not (config['max_steps'] == 0 or rl_agent.get_global_step() < config['max_steps']):
-            with open(output_file, 'a+') as f:
-                avg_last = sum(last_n_ep_score) / len(last_n_ep_score)
-                avg = sum(all_ep_scores) / len(all_ep_scores)
-                f.write(config['model_dir'] + ' ' + str(max_ep_score) + ' ' + str(avg) + ' ' + str(avg_last) + '\n')
+            if output_file is not None:
+                with open(output_file, 'a+') as f:
+                    avg_last = sum(last_n_ep_score) / len(last_n_ep_score)
+                    avg = sum(all_ep_scores) / len(all_ep_scores)
+                    f.write(config['model_dir'] + ' ' + str(max_ep_score) + ' ' + str(avg) + ' ' + str(avg_last) + '\n')
             loop.stop()
             break
+
+        if config['self_play']:
+            if not eval_mode and eval_step >= config['self_play_eval_freq_steps']:
+                eval_mode = True
+                eval_step = 0
+                env.kill()
+                env = get_env(config['self_play_eval_env'])
+                continue
+            if eval_mode and eval_step >= config['self_play_eval_duration_steps']:
+                eval_mode = False
+                eval_step = 0
+                env.kill()
+                env = get_env(config['env'])
+                continue
 
         decoded = data.decode('utf-8')
         # decide what to do based on first word
@@ -464,13 +491,83 @@ async def handle_client(reader, writer):
     conn_player.pop(count, None)
 
 
+def get_env(env_config):
+    num_maps = 0
+    maps = []
+    for map in os.listdir(env_config['map_folder']):
+        num_maps += 1
+        maps.append(env_config['map_folder'] + '/' + map)
+    # TODO: work out correct formula for iterations
+    iterations = 10000
+    args = [
+        "java",
+        "-jar",
+        "microrts.jar",
+        env_config['unit_type_table'],
+        env_config['selected_ai'],
+        str(iterations),
+        str(env_config['max_game_length']),
+        str(env_config['time_budget']),
+        str(env_config['pre_analysis_budget']),
+        'true' if env_config['full_observability'] else 'false',
+        'true' if env_config['store_traces'] else 'false',
+        str(len(env_config['opponents']))
+    ]
+    args += env_config['opponents'] + [str(num_maps)] + maps
+
+    return subprocess.Popen(args, stdout=None, stderr=None)
+
+
+def run_one_env(config, rename_if_duplicate=False, server_only=False):
+    global rl_agent, loop, env, eval_mode
+    global all_ep_scores, last_n_ep_score, max_ep_score
+
+    restore = True
+    if not os.path.exists(config['model_dir']):
+        restore = False
+    elif rename_if_duplicate:
+        restore = False
+        time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        config['model_dir'] = config['model_dir'] + '_' + time
+    if not restore:
+        os.makedirs(config['model_dir'])
+        with open(config['model_dir'] + '/config.json', 'w+') as fp:
+            fp.write(json.dumps(config, indent=4))
+
+    tf.reset_default_graph()
+    with tf.Session() as sess:
+        rl_agent = DQNAgent(sess, config, restore=restore)
+        print('RL agent ready.')
+
+        # metrics
+        max_ep_score = -1
+        all_ep_scores = []
+        last_n_ep_score = []
+
+        # if not doing self play always record episode summaries
+        eval_mode = not config['self_play']
+
+        # start env
+        if not server_only:
+            env = get_env(config['env'])
+        print('Environment started, about to start the loop')
+
+        loop = asyncio.get_event_loop()
+        server = asyncio.start_server(handle_client, HOST, PORT, reuse_address=True)
+        loop.create_task(server)
+        loop.run_forever()
+
+        # loop exits once enough episodes or steps have passed
+        server.close()
+        if not server_only:
+            env.kill()
+
+
 def main():
-    global rl_agent
-    global loop
     global one_obs_per_turn
     global config
     global output_file
-    global all_ep_scores, last_n_ep_score, max_ep_score
+
     # TODO: for now just load the config once, no batches
     # load configuration
     with open('mrts_config.json', 'r') as fp:
@@ -494,10 +591,6 @@ def main():
                 f.write('Run_Name Max_Score Avg_Score Last_' + str(num_eps) + '_Score\n')
         count = 0
         while True:
-            max_ep_score = -1
-            all_ep_scores = []
-            last_n_ep_score = []
-
             count += 1
             name = str(count)
             for param in batch['log_random']:
@@ -508,81 +601,13 @@ def main():
                 name += '_' + param + '_' + '{:.2e}'.format(config[param])
             config['model_dir'] = base_name + '/' + name
             print('****** Starting a new run in this batch: ' + name + ' ******')
-            # run_one_env(config, rename_if_duplicate=True, output_file=summary_file_name)
-            # save a copy of the configuration file being used for a run in the run's folder (first time only)
-
-            if os.path.exists(config['model_dir']):
-                time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-                config['model_dir'] = config['model_dir'] + '_' + time
-
-            os.makedirs(config['model_dir'])
-            with open(config['model_dir'] + '/config.json', 'w+') as fp:
-                fp.write(json.dumps(config, indent=4))
-
-            tf.reset_default_graph()
-            with tf.Session() as sess:
-                rl_agent = DQNAgent(sess, config, restore=False)
-                print('RL agent ready.')
-
-                # start env
-                env_config = config['env']
-                num_maps = 0
-                maps = []
-                for map in os.listdir(env_config['map_folder']):
-                    num_maps += 1
-                    maps.append(env_config['map_folder'] + '/' + map)
-                # TODO: work out correct formula for iterations
-                iterations = 10000
-                args = [
-                    "java",
-                    "-jar",
-                    "microrts.jar",
-                    env_config['unit_type_table'],
-                    env_config['selected_ai'],
-                    str(iterations),
-                    str(env_config['max_game_length']),
-                    str(env_config['time_budget']),
-                    str(env_config['pre_analysis_budget']),
-                    'true' if env_config['full_observability'] else 'false',
-                    'true' if env_config['store_traces'] else 'false',
-                    str(len(env_config['opponents']))
-                ]
-                args += env_config['opponents'] + [str(num_maps)] + maps
-
-                # env = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                # stdout, stderr = env.communicate()
-                # print(stdout)
-                env = subprocess.Popen(args, stdout=None, stderr=None)
-                print('Environment started, about to start the loop')
-
-                loop = asyncio.get_event_loop()
-                server = asyncio.start_server(handle_client, HOST, PORT, reuse_address=True)
-                loop.create_task(server)
-                # loop.create_task(asyncio.start_server(handle_client, HOST, PORT))
-                loop.run_forever()
-
-                # loop exits once enough episodes or steps have passed
-                print('Attempting to end run', count)
-                server.close()
-                env.kill()
-                # loop.close()
-
+            run_one_env(config, rename_if_duplicate=True)
     else:
-        # save a copy of the configuration file being used for a run in the run's folder (first time only)
-        restore = True
-        if not os.path.exists(config['model_dir']):
-            restore = False
-        if not restore:
-            os.makedirs(config['model_dir'])
-            with open(config['model_dir'] + '/config.json', 'w+') as fp:
-                fp.write(json.dumps(config, indent=4))
-
-        with tf.Session() as sess:
-            rl_agent = DQNAgent(sess, config, restore)
-            print('Ready to accept incoming connections')
-            loop = asyncio.get_event_loop()
-            loop.create_task(asyncio.start_server(handle_client, HOST, PORT))
-            loop.run_forever()
+        if config['server_only_no_env']:
+            # run just the server and don't start a mrts tournament
+            run_one_env(config, rename_if_duplicate=False, server_only=True)
+        else:
+            run_one_env(config, rename_if_duplicate=False)
 
 
 if __name__ == '__main__':

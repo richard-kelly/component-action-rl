@@ -96,13 +96,14 @@ class DQNAgent:
         self._last_reward[game_num] = None
         self._episode_score[game_num] = 0
 
-    def observe(self, game_num, terminal=False, reward=0):
+    def observe(self, game_num, terminal=False, reward=0, record=True):
         self._episode_score[game_num] += reward
-        if terminal:
+        if terminal and record:
             self._average_episode_score = (self._average_episode_score * self._episodes + self._episode_score[game_num]) / (self._episodes + 1)
             epsilon = self._epsilon if self._memory_start_size_reached else 1.0
             summary = self._network.episode_summary(self._sess, self._episode_score[game_num], self._average_episode_score, epsilon)
             self._writer.add_summary(summary, self._steps)
+            self._episodes += 1
 
         if not self._config['inference_only']:
             self._last_reward[game_num] = reward
@@ -112,15 +113,14 @@ class DQNAgent:
                 # Next state doesn't matter for a terminal experience, but when it's sampled later the validation
                 # acts on the entire batch, and it's nice to have a valid state in there rather than all zeros.
                 self._memory.add_sample(self._last_state[game_num], self._last_action[game_num], reward, self._last_state[game_num], True)
-                self._episodes += 1
 
                 self._episode_score.pop(game_num, None)
                 self._last_reward.pop(game_num, None)
                 self._last_action.pop(game_num, None)
                 self._last_state.pop(game_num, None)
 
-    def act(self, game_num, state, remember):
-        action = self._choose_action(state)
+    def act(self, game_num, state, remember, force_epsilon):
+        action = self._choose_action(state, force_epsilon)
 
         if remember:
             self._steps += 1
@@ -166,13 +166,15 @@ class DQNAgent:
         elif self._config['decay_type'] == "linear":
             self._epsilon = self._epsilon - (self._decay * steps)
 
-    def _choose_action(self, state):
+    def _choose_action(self, state, force_epsilon):
         state_for_validation = {}
         for name in state:
             # adds a new dimension of length 1 at the beginning (the batch size)
             state_for_validation[name] = np.expand_dims(state[name], axis=0)
 
         epsilon = self._config['inference_only_epsilon'] if self._config['inference_only'] else self._epsilon
+        if force_epsilon is not None:
+            epsilon = force_epsilon
 
         if not self._memory_start_size_reached or random.random() < epsilon:
             if self._sample_action is None:
