@@ -7,10 +7,10 @@
     "model_checkpoint_frequency": 500000,
     "model_checkpoint_max": 4,
     "model_checkpoint_every_n_hours": 24,
-    "max_steps": 5000000,
+    "max_steps": 10e6,
     "max_episodes": 0,
 
-    "learning_rate": 5e-4,
+    "learning_rate": 1e-4,
     "learning_rate_decay_method": "none",
     "learning_rate_decay_steps": 10000,
     "learning_rate_decay_param": 1.0,
@@ -20,21 +20,21 @@
     "discount": 0.99,
     "batch_size": 32,
     "reg_type": "l2",
-    "reg_scale": 1e-4,
+    "reg_scale": 5e-6,
 
     "update_frequency": 4,
     "memory_size": 1000000,
-    "memory_burn_in": 5000,
+    "memory_burn_in": 50000,
     "target_update_frequency": 10000,
 
     "use_priority_experience_replay": true,
     "per_alpha": 0.6,
     "per_starting_beta": 0.4,
-    "per_beta_anneal_steps": 5000000,
+    "per_beta_anneal_steps": 10e6,
 
     "initial_epsilon": 1.0,
     "final_epsilon": 0.1,
-    "decay_steps": 2000000,
+    "decay_steps": 1e6,
     "decay_type": "linear",
 
     "debug_logging": false,
@@ -58,8 +58,10 @@
     },
 
     "self_play": true,
-    "self_play_eval_freq_steps": 25000,
-    "self_play_eval_duration_steps": 5000,
+    "self_play_eval_freq_steps": 1e6,
+    "self_play_eval_freq_episodes": 0,
+    "self_play_eval_duration_steps": 0,
+    "self_play_eval_duration_episodes": 207,
     "self_play_epsilon": 0.05,
     "self_play_eval_env": {
         "screen_size": 8,
