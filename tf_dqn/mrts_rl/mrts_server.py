@@ -32,7 +32,9 @@ config = None
 loop = None
 env = None
 step = 0
+episodes = 0
 eval_step = 0
+eval_episodes = 0
 eval_mode = False
 
 output_file = None
@@ -50,7 +52,10 @@ def get_conn_count():
 
 def handle_game_over(winner, conn_num):
     global rl_agent
-    global all_ep_scores, last_n_ep_score, max_ep_score
+    global all_ep_scores, last_n_ep_score, max_ep_score, episodes, eval_episodes
+
+    episodes += 1
+    eval_episodes += 1
 
     if winner == -1:
         reward = 0
@@ -422,7 +427,7 @@ def get_players_resources_array(self_resources, enemy_resources):
 async def handle_client(reader, writer):
     global budgets
     global conn_player
-    global env, eval_step, eval_mode
+    global env, eval_step, eval_episodes, eval_mode
     count = get_conn_count()
     print('Connection', count, ': OPEN')
     writer.write(b"ack\n")
@@ -436,7 +441,9 @@ async def handle_client(reader, writer):
             break
 
         # check if time to quit this training session
-        if not (config['max_steps'] == 0 or rl_agent.get_global_step() < config['max_steps']):
+        over_steps = config['max_steps'] != 0 and rl_agent.get_global_step() >= config['max_steps']
+        over_episodes = config['max_episodes'] != 0 and episodes >= config['max_episodes']
+        if over_steps or over_episodes:
             if output_file is not None:
                 with open(output_file, 'a+') as f:
                     avg_last = sum(last_n_ep_score) / len(last_n_ep_score)
@@ -446,18 +453,26 @@ async def handle_client(reader, writer):
             break
 
         if config['self_play']:
-            if not eval_mode and eval_step >= config['self_play_eval_freq_steps']:
-                eval_mode = True
-                eval_step = 0
-                env.kill()
-                env = get_env(config['self_play_eval_env'])
-                continue
-            if eval_mode and eval_step >= config['self_play_eval_duration_steps']:
-                eval_mode = False
-                eval_step = 0
-                env.kill()
-                env = get_env(config['env'])
-                continue
+            if not eval_mode:
+                over_steps = config['self_play_eval_freq_steps'] != 0 and eval_step >= config['self_play_eval_freq_steps']
+                over_episodes = config['self_play_eval_freq_episodes'] != 0 and eval_episodes >= config['self_play_eval_freq_episodes']
+                if over_steps or over_episodes:
+                    eval_mode = True
+                    eval_step = 0
+                    eval_episodes = 0
+                    env.kill()
+                    env = get_env(config['self_play_eval_env'])
+                    continue
+            if eval_mode:
+                over_steps = config['self_play_eval_duration_steps'] != 0 and eval_step >= config['self_play_eval_duration_steps']
+                over_episodes = config['self_play_eval_duration_episodes'] != 0 and eval_episodes >= config['self_play_eval_duration_episodes']
+                if over_steps or over_episodes:
+                    eval_mode = False
+                    eval_step = 0
+                    eval_episodes = 0
+                    env.kill()
+                    env = get_env(config['env'])
+                    continue
 
         decoded = data.decode('utf-8')
         # decide what to do based on first word
@@ -520,7 +535,7 @@ def get_env(env_config):
 
 def run_one_env(config, rename_if_duplicate=False, server_only=False):
     global rl_agent, loop, env, eval_mode
-    global all_ep_scores, last_n_ep_score, max_ep_score
+    global all_ep_scores, last_n_ep_score, max_ep_score, episodes, eval_episodes
 
     restore = True
     if not os.path.exists(config['model_dir']):
@@ -543,6 +558,8 @@ def run_one_env(config, rename_if_duplicate=False, server_only=False):
         max_ep_score = -1
         all_ep_scores = []
         last_n_ep_score = []
+        episodes = 0
+        eval_episodes = 0
 
         # if not doing self play always record episode summaries
         eval_mode = not config['self_play']
