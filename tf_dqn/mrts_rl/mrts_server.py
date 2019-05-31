@@ -113,7 +113,7 @@ def handle_pre_game_analysis(unused_state, ms, conn_num):
     print('Connection', conn_num, ': Received pre-game analysis state for', ms, 'ms.')
 
 
-def handle_get_action(state, player, conn_num):
+def handle_get_action(state, player, state_eval, conn_num):
     global conn_player
     global step, eval_step
 
@@ -266,7 +266,8 @@ def handle_get_action(state, player, conn_num):
         remember = i == remembered_action or not one_obs_per_turn
         if step > 0:
             if remember:
-                rl_agent.observe(conn_num, terminal=False, reward=0)
+                reward = state_eval if config['env']['use_shaped_rewards'] else 0
+                rl_agent.observe(conn_num, terminal=False, reward=reward)
         step += 1
         if eval_mode:
             force_eps = config['self_play_epsilon']
@@ -490,7 +491,8 @@ async def handle_client(reader, writer):
         elif re.search("^getAction", decoded):
             lines = decoded.split('\n')
             player = int(lines[0].split()[1])
-            action = handle_get_action(json.loads(lines[1]), player, count)
+            state_eval = float(lines[1])
+            action = handle_get_action(json.loads(lines[2]), player, state_eval, count)
             message = action + '\n'
             writer.write(message.encode('utf-8'))
         elif re.search("^gameOver", decoded):

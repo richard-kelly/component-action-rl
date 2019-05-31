@@ -43,6 +43,7 @@
     "env": {
         "screen_size": 8,
         "one_obs_per_turn": true,
+        "use_shaped_rewards": true,
 
         "unit_type_table": "Finetuned-Both",
         "selected_ai": "SocketAI",
