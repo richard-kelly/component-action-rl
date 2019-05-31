@@ -551,7 +551,7 @@ def run_one_env(config, rename_if_duplicate=False, server_only=False):
 
     tf.reset_default_graph()
     with tf.Session() as sess:
-        rl_agent = DQNAgent(sess, config, restore=restore)
+        rl_agent = DQNAgent(sess, config, restore, 'abstract')
         print('RL agent ready.')
 
         # metrics
