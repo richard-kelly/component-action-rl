@@ -273,8 +273,12 @@ def handle_get_action(state, player, state_eval, conn_num):
             if remember:
                 if conn_num not in conn_last_reward:
                     conn_last_reward[conn_num] = 0
-                reward = state_eval - conn_last_reward[conn_num] if config['env']['use_shaped_rewards'] else 0
-                conn_last_reward[conn_num] = reward
+                if config['env']['use_shaped_rewards']:
+                    reward = state_eval - conn_last_reward[conn_num]
+                    conn_last_reward[conn_num] = state_eval
+                else:
+                    reward = 0
+                    conn_last_reward[conn_num] = 0
                 rl_agent.observe(conn_num, terminal=False, reward=reward)
         step += 1
         if eval_mode:
