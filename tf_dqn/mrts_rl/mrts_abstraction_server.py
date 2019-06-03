@@ -597,7 +597,7 @@ def main():
     with open('batch.json', 'r') as fp:
         batch = json.load(fp=fp)
 
-    if batch['use']:
+    if config['use_batch']:
         base_name = config['model_dir']
         time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         output_file = base_name + '/_' + time + '_batch_summary.txt'
