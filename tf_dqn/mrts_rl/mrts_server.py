@@ -20,6 +20,9 @@ conn_count = 0
 # remember the player for each connection
 conn_player = {}
 
+# remember last reward for each connection
+conn_last_reward = {}
+
 # game details
 budgets = None
 unit_types = None
@@ -66,6 +69,8 @@ def handle_game_over(winner, conn_num):
     else:
         reward = -1
         print('Connection', conn_num, ': GAME OVER - LOST')
+
+    reward = reward - conn_last_reward[conn_num]
 
     if len(last_n_ep_score) == num_eps:
         last_n_ep_score.pop(0)
@@ -114,7 +119,7 @@ def handle_pre_game_analysis(unused_state, ms, conn_num):
 
 
 def handle_get_action(state, player, state_eval, conn_num):
-    global conn_player
+    global conn_player, conn_last_reward
     global step, eval_step
 
     eval_step += 1
@@ -266,7 +271,10 @@ def handle_get_action(state, player, state_eval, conn_num):
         remember = i == remembered_action or not one_obs_per_turn
         if step > 0:
             if remember:
-                reward = state_eval if config['env']['use_shaped_rewards'] else 0
+                if conn_num not in conn_last_reward:
+                    conn_last_reward[conn_num] = 0
+                reward = state_eval - conn_last_reward[conn_num] if config['env']['use_shaped_rewards'] else 0
+                conn_last_reward[conn_num] = reward
                 rl_agent.observe(conn_num, terminal=False, reward=reward)
         step += 1
         if eval_mode:
