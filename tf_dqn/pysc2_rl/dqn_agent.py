@@ -14,6 +14,7 @@ class DQNAgent:
         self._steps = 0
         self._episodes = 0
         self._episode_score = 0
+        self._average_episode_score = 0
         # if doing inference only, we don't need to populate the experience memory
         self._memory_start_size_reached = config['inference_only']
         self._last_state = None
@@ -32,7 +33,7 @@ class DQNAgent:
         # initialize epsilon
         self._epsilon = self._config['initial_epsilon']
         if self._config['decay_type'] == "exponential":
-            self._decay = math.exp(math.log(self._config['final_epsilon'] / self._config['initial_epsilon'])/self._config['decay_steps'])
+            self._decay = math.exp(math.log(self._config['final_epsilon'] / self._config['initial_epsilon']) / self._config['decay_steps'])
         elif self._config['decay_type'] == "linear":
             self._decay = (self._config['initial_epsilon'] - self._config['final_epsilon']) / self._config['decay_steps']
         else:
@@ -89,8 +90,9 @@ class DQNAgent:
     def observe(self, terminal=False, reward=0):
         self._episode_score += reward
         if terminal:
+            self._average_episode_score = (self._average_episode_score * self._episodes + self._episode_score) / (self._episodes + 1)
             epsilon = self._epsilon if self._memory_start_size_reached else 1.0
-            summary = self._network.episode_summary(self._sess, self._episode_score, epsilon)
+            summary = self._network.episode_summary(self._sess, self._episode_score, self._average_episode_score, epsilon)
             self._writer.add_summary(summary, self._steps)
             self._episode_score = 0
 

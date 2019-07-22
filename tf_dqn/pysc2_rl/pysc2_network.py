@@ -401,6 +401,8 @@ class SC2Network:
         with tf.variable_scope('episode_summaries'):
             self._episode_score = tf.placeholder(shape=[], dtype=tf.float32, name='episode_score')
             tf.summary.scalar('episode_score', self._episode_score)
+            self._avg_episode_score = tf.placeholder(shape=[], dtype=tf.float32, name='avg_episode_score')
+            tf.summary.scalar('avg_episode_score', self._avg_episode_score)
             self._epsilon = tf.placeholder(shape=[], dtype=tf.float32, name='episode_ending_epsilon')
             tf.summary.scalar('episode_ending_epsilon', self._epsilon)
         self._episode_summaries = tf.summary.merge_all(scope='episode_summaries')
@@ -430,11 +432,12 @@ class SC2Network:
             keep_checkpoint_every_n_hours=self._checkpoint_hours
         )
 
-    def episode_summary(self, sess, score, epsilon):
+    def episode_summary(self, sess, score, avg_score_all_episodes, epsilon):
         return sess.run(
             self._episode_summaries,
             feed_dict={
                 self._episode_score: score,
+                self._avg_episode_score: avg_score_all_episodes,
                 self._epsilon: epsilon
             }
         )
