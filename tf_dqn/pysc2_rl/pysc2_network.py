@@ -281,6 +281,7 @@ class SC2Network:
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
         self._terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='terminal_placeholder')
         self._per_weights = tf.placeholder(shape=[None, ], dtype=tf.float32, name='per_weights_placeholder')
+        self._training = tf.placeholder(shape=[], dtype=tf.bool, name='training_placeholder')
 
         # primary and target Q nets
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
