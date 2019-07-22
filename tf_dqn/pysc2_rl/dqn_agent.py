@@ -14,13 +14,15 @@ class DQNAgent:
         self._steps = 0
         self._episodes = 0
         self._episode_score = 0
-        self._memory_start_size_reached = False
+        # if doing inference only, we don't need to populate the experience memory
+        self._memory_start_size_reached = config['inference_only']
         self._last_state = None
         self._last_reward = None
         self._last_action = None
         self._sample_action = None
         self._config = config
 
+        # used for timing steps of action selection
         self._times = dict(
             sample=0,
             train_batch=0
@@ -28,10 +30,7 @@ class DQNAgent:
         self._time_count = 0
 
         # initialize epsilon
-        if not self._config['run_model_no_training']:
-            self._epsilon = self._config['initial_epsilon']
-        else:
-            self._epsilon = 0.0
+        self._epsilon = self._config['initial_epsilon']
         if self._config['decay_type'] == "exponential":
             self._decay = math.exp(math.log(self._config['final_epsilon'] / self._config['initial_epsilon'])/self._config['decay_steps'])
         elif self._config['decay_type'] == "linear":
@@ -95,7 +94,8 @@ class DQNAgent:
             self._writer.add_summary(summary, self._steps)
             self._episode_score = 0
 
-        if not self._config['run_model_no_training']:
+        # don't store things in memory if only doing inference
+        if not self._config['inference_only']:
             self._last_reward = reward
             # at end of episode store memory sample with None for next state
             # set last_state to None so that on next act() we know it is beginning of episode
@@ -108,7 +108,8 @@ class DQNAgent:
         action = self._choose_action(state, available_actions)
         self._steps += 1
 
-        if not self._config['run_model_no_training']:
+        # if only doing inference no need to store anything in memory, update network, etc.
+        if not self._config['inference_only']:
             if self._last_state is not None:
                 self._memory.add_sample(self._last_state, self._last_action, self._last_reward, state, False)
 
@@ -150,7 +151,11 @@ class DQNAgent:
 
     def _choose_action(self, state, available_actions):
         action = {}
-        if not self._config['run_model_no_training'] and (not self._memory_start_size_reached or random.random() < self._epsilon):
+
+        # use epsilon set in config if doing inference only, otherwise use calculated current epsilon
+        epsilon = self._config['inference_only_epsilon'] if self._config['inference_only'] else self._epsilon
+        if not self._memory_start_size_reached or random.random() < epsilon:
+            # take a random action
             if self._sample_action is None:
                 # store one action to serve as action specification
                 _, self._sample_action = self._network.predict_one(self._sess, state)
@@ -165,6 +170,7 @@ class DQNAgent:
                 else:
                     action[name] = random.randint(0, q_values.shape[1] - 1)
         else:
+            # get action by inference from network
             summary, pred = self._network.predict_one(self._sess, state)
             self._writer.add_summary(summary, self._steps)
             for name, q_values in pred.items():

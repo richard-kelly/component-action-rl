@@ -1,5 +1,7 @@
 {
-    "run_model_no_training": false,
+    "use_batch": false,
+    "inference_only": false,
+    "inference_only_epsilon": 0,
 
     "model_dir": "models/apr22",
     "model_checkpoint_frequency": 50000,
