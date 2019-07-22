@@ -238,15 +238,11 @@ def handle_get_action(state, player, state_eval, conn_num):
     # TODO: add more information about current actions (type, target, etc.)
 
     # An action for a turn is a list with actions for each unit: a dict with
-    # "unitID": int,
-    # "unitAction": {
-    #     "type":      int [one of 0 (none/wait), 1 (move), 2 (harvest), 3 (return), 4 (produce), 5 (attack_location)],
-    #     // used for direction (of move, harvest, return, produce) and duration (wait)
-    #     "parameter": int [one of -1 (none), 0 (up), 1 (right), 2 (down), 3 (left) OR any positive int for wait],
-    #     "x":         int [x coordinate of attack],
-    #     "y":         int [y coordinate of attack],
-    #     "unitType":  str [the name of the type of unit to produce with a produce action]
-    # }
+    # "unitID"  : int,
+    # "type"    : string (move/train/build/harvest/attack) == 1/2/3/4/5 (0 is no op, don't send action)
+    # "x"       : int (coord) <-- not for 'train'
+    # "y"       : int (coord) <-- not for 'train'
+    # "unitType": string (Base/Barracks/Worker/Light/Heavy/Ranged)
 
     # Actions have to have a target / be legal at the time they are issued.
     # So even though actions take time to complete, there has to be a target at the time an attack is issued,

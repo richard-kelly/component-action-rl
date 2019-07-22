@@ -230,7 +230,7 @@ class MRTSAbstractionNetwork:
         n = self._screen_size
         action_q_vals = dict(
             select=tf.reshape(select, [-1, n * n], name='select'),
-            type=tf.layers.dense(fc_non_spatial_2, 5, name='type'),
+            type=tf.layers.dense(fc_non_spatial_2, 6, name='type'),
             param=tf.reshape(param, [-1, n * n], name='param'),
             unit_type=tf.layers.dense(fc_non_spatial_2, 6, name='unit_type')
         )
