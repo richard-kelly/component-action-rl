@@ -175,7 +175,7 @@ def main():
     if config['use_batch']:
         base_name = config['model_dir']
         time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        summary_file_name = base_name + '/_' + time + '_batch_summary.txt'
+        summary_file_name = base_name + '/_' + time + '_batch_summary.csv'
         count = 0
         while True:
             count += 1
