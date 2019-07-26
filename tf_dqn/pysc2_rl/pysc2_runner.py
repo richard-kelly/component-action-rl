@@ -49,6 +49,9 @@ def get_action_function(obs, action, actions_in_use, screen_size, half_rect=20):
             elif name == 'screen2':
                 x, y = get_screen_coords(action['screen2'], screen_size)
                 args.append([x, y])
+            elif name == 'minimap':
+                x, y = get_screen_coords(action['minimap'], screen_size)
+                args.append([x, y])
             elif name not in action:
                 # if network doesn't supply argument, uses first choice, which is usually default no modifier action
                 args.append([0])
