@@ -133,6 +133,7 @@ def preprocess_state(obs, actions_in_use):
     state = dict(
         screen_player_relative=obs.observation['feature_screen'].player_relative,
         screen_selected=obs.observation['feature_screen'].selected,
+        screen_unit_hit_points=obs.observation['feature_screen'].unit_hit_points,
         available_actions=avail_actions
     )
     return state

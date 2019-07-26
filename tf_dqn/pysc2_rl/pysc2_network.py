@@ -74,7 +74,20 @@ class SC2Network:
             labels=inputs['screen_player_relative'],
             num_classes=2
         )[:, :, :, 1:]
-        screen = tf.concat([screen_player_relative_one_hot, screen_selected_one_hot], axis=-1, name='screen_input')
+
+        # scale hit points (0-?) logarithmically (add 1 to avoid undefined) since they can be so high
+        screen_unit_hit_points = tf.math.log1p(tf.cast(inputs['screen_unit_hit_points'], dtype=tf.float32))
+        # add a dimension (depth)
+        screen_unit_hit_points = tf.expand_dims(screen_unit_hit_points, axis=-1)
+
+        screen = tf.concat(
+            [
+                screen_player_relative_one_hot,
+                screen_selected_one_hot,
+                screen_unit_hit_points
+            ],
+            axis=-1,
+            name='screen_input')
 
         # begin shared conv layers
         conv1_spatial = tf.layers.conv2d(
@@ -245,6 +258,11 @@ class SC2Network:
                     shape=[None, self._screen_size, self._screen_size],
                     dtype=tf.int32,
                     name='screen_selected'
+                ),
+                screen_unit_hit_points=tf.placeholder(
+                    shape=[None, self._screen_size, self._screen_size],
+                    dtype=tf.int32,
+                    name='screen_unit_hit_points'
                 ),
                 available_actions=tf.placeholder(
                     shape=[None, len(self._action_list)],
