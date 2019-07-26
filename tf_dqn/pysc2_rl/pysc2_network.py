@@ -39,8 +39,8 @@ class SC2Network:
 
         self._screen_size = environment_properties['screen_size']
         self._minimap_size = environment_properties['minimap_size']
-        self._action_components = environment_properties['action_components']
-        self._action_list = environment_properties['action_list']
+        self._action_components = environment_properties['computed_action_components']
+        self._action_list = environment_properties['computed_action_list']
 
         # define the placeholders
         self._global_step = None
@@ -196,11 +196,12 @@ class SC2Network:
             spatial_policy_2 = None
 
         n = self._screen_size
+        m = self._minimap_size
         comp = self._action_components
         action_q_vals = dict(
-            function=tf.layers.dense(fc_non_spatial_2, len(self._action_list['function']), name='function'),
+            function=tf.layers.dense(fc_non_spatial_2, len(self._action_list), name='function'),
             screen=tf.reshape(spatial_policy_1, [-1, n * n], name='screen') if comp['screen'] else None,
-            minimap=tf.reshape(spatial_policy_1, [-1, n * n], name='minimap') if comp['minimap'] else None,
+            minimap=tf.reshape(spatial_policy_1, [-1, m * m], name='minimap') if comp['minimap'] else None,
             screen2=tf.reshape(spatial_policy_2, [-1, n * n], name='screen2') if comp['screen2'] else None,
             queued=tf.layers.dense(fc_non_spatial_2, 2, name='queued') if comp['queued'] else None,
             control_group_act=tf.layers.dense(fc_non_spatial_2, 5, name='control_group_act') if comp['control_group_act'] else None,
@@ -246,20 +247,20 @@ class SC2Network:
                     name='screen_selected'
                 ),
                 available_actions=tf.placeholder(
-                    shape=[None, len(self._action_list['function'])],
+                    shape=[None, len(self._action_list)],
                     dtype=tf.bool,
                     name='available_actions'
                 )
             )
 
     def _get_argument_masks(self):
-        masks = dict(function=tf.constant([1] * len(self._action_list['function']), dtype=tf.float32, name='function'))
+        masks = dict(function=tf.constant([1] * len(self._action_list), dtype=tf.float32, name='function'))
 
         for arg_type in actions.TYPES:
             if self._action_components[arg_type.name]:
                 mask = []
                 for func in actions.FUNCTIONS:
-                    if int(func.id) not in self._action_list['function']:
+                    if int(func.id) not in self._action_list:
                         continue
                     found = False
                     for arg in func.args:
@@ -278,7 +279,7 @@ class SC2Network:
         comp = self._action_components
         # number of options for function args hard coded here... probably won't change in pysc2
         num_options = dict(
-            function=len(self._action_list['function']),
+            function=len(self._action_list),
             screen=self._screen_size * self._screen_size,
             minimap=self._minimap_size * self._minimap_size,
             screen2=self._screen_size * self._screen_size,

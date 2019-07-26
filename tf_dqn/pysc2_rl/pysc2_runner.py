@@ -66,6 +66,67 @@ def get_screen_coords(val, screen_size):
     return x, y
 
 
+def compute_action_list(rules):
+    # Returns sorted list of integer action function IDs
+    allowed_actions = set()
+    # first process all includes
+    for rule in rules:
+        if rule['type'] == 'include_range':
+            for i in range(rule['list'][0], rule['list'][1] + 1):
+                allowed_actions.add(i)
+        elif rule['type'] == 'include_list':
+            for i in rule['list']:
+                allowed_actions.add(i)
+    # then process all excludes
+    for rule in rules:
+        if rule['type'] == 'exclude_range':
+            for i in range(rule['list'][0], rule['list'][1] + 1):
+                allowed_actions.remove(i)
+        elif rule['type'] == 'exclude_list':
+            for i in rule['list']:
+                allowed_actions.remove(i)
+    computed = list(allowed_actions)
+    computed.sort()
+    return computed
+
+
+def process_config_env(config):
+    config['env']['computed_action_list'] = compute_action_list(config['env']['action_functions'])
+
+    all_components = dict(
+        function=True,
+        screen=False,
+        minimap=False,
+        screen2=False,
+        queued=False,
+        control_group_act=False,
+        control_group_id=False,
+        select_point_act=False,
+        select_add=False,
+        select_unit_act=False,
+        select_unit_id=False,
+        select_worker=False,
+        build_queue_id=False,
+        unload_id=False
+    )
+
+    # if some function we are using uses an argument type, we must use it
+    for func in actions.FUNCTIONS:
+        if int(func.id) in config['env']['computed_action_list']:
+            for arg in func.args:
+                if arg.name in all_components:
+                    all_components[arg.name] = True
+
+    # these are special and can be replaced with default values (or computed differently in case of screen2)
+    if not config['env']['use_queue']:
+        all_components['queued'] = False
+    if not config['env']['use_screen2']:
+        all_components['screen2'] = False
+
+    config['env']['computed_action_components'] = all_components
+    return config
+
+
 def preprocess_state(obs, actions_in_use):
     avail_actions = np.in1d(actions_in_use, obs.observation['available_actions'])
 
@@ -122,10 +183,8 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             episode_reward = 0
             while (config['max_steps'] == 0 or step <= config['max_steps']) and (config['max_episodes'] == 0 or episode <= config['max_episodes']):
                 step += 1
-                state = preprocess_state(obs, config['env']['action_list']['function'])
-                available_actions = dict(
-                    function=obs.observation['available_actions']
-                )
+                state = preprocess_state(obs, config['env']['computed_action_list'])
+                available_actions = obs.observation['available_actions']
 
                 episode_reward += obs.reward
                 if obs.step_type is StepType.LAST:
@@ -149,7 +208,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                 action_for_sc = get_action_function(
                     obs,
                     action,
-                    config['env']['action_list']['function'],
+                    config['env']['computed_action_list'],
                     config['env']['screen_size'],
                     half_rect=config['env']['select_rect_half_size']
                 )
@@ -170,6 +229,8 @@ def main():
     # load configuration
     with open('pysc2_config.json', 'r') as fp:
         config = json.load(fp=fp)
+
+    config = process_config_env(config)
 
     # load batch config file
     with open('batch.json', 'r') as fp:

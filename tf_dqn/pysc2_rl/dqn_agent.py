@@ -106,7 +106,7 @@ class DQNAgent:
                 self._last_state = None
                 self._episodes += 1
 
-    def act(self, state, available_actions=None):
+    def act(self, state, available_actions):
         action = self._choose_action(state, available_actions)
         self._steps += 1
 
@@ -162,13 +162,10 @@ class DQNAgent:
                 # store one action to serve as action specification
                 _, self._sample_action = self._network.predict_one(self._sess, state)
             for name, q_values in self._sample_action.items():
-                if available_actions and name in available_actions:
-                    if name in self._config['env']['action_list']:
-                        valid = np.in1d(self._config['env']['action_list'][name], available_actions[name])
-                        options = np.nonzero(valid)[0]
-                        action[name] = np.random.choice(options)
-                    else:
-                        action[name] = np.random.choice(available_actions[name])
+                if name == 'function':
+                    valid = np.in1d(self._config['env']['computed_action_list'], available_actions)
+                    options = np.nonzero(valid)[0]
+                    action[name] = np.random.choice(options)
                 else:
                     action[name] = random.randint(0, q_values.shape[1] - 1)
         else:
@@ -176,13 +173,9 @@ class DQNAgent:
             summary, pred = self._network.predict_one(self._sess, state)
             self._writer.add_summary(summary, self._steps)
             for name, q_values in pred.items():
-                if available_actions and name in available_actions:
+                if name == 'function':
                     q_values = q_values.flatten()
-                    if name in self._config['env']['action_list']:
-                        valid = np.in1d(self._config['env']['action_list'][name], available_actions[name])
-                    else:
-                        valid = np.zeros(q_values.shape, dtype=np.int32)
-                        valid[available_actions[name]] = 1
+                    valid = np.in1d(self._config['env']['computed_action_list'], available_actions)
                     indices = np.nonzero(np.logical_not(valid))
                     q_values[indices] = np.nan
                 action[name] = np.nanargmax(q_values)
