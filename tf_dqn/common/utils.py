@@ -42,6 +42,16 @@ def grid_to_flattened(screen_size, tile):
     return tile[1] * screen_size + tile[0]
 
 
+def bytes_dec_to_bin(num_bytes):
+    if num_bytes == 0:
+        return "0B"
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(num_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(num_bytes / p, 2)
+    return "%s %s" % (s, size_name[i])
+
+
 def main():
     print("testing one hot encode:")
     x = np.array([0, 0, 1, 2, 3, 0, 1, 2, 3]).reshape(3, 3)

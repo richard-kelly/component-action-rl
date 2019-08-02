@@ -1,4 +1,5 @@
 import numpy as np
+from tf_dqn.common import utils
 
 
 class LatestReplayMemory:
@@ -28,14 +29,26 @@ class LatestReplayMemory:
                 is_terminal=np.zeros(self._max_steps, dtype=np.int8)
             )
 
+            # calculate experience replay memory size
+            bytes_per_experience = self._samples['reward'].itemsize + self._samples['is_terminal'].itemsize
+
             for key in state:
                 shape = tuple([self._max_steps] + list(state[key].shape))
                 self._samples['state'][key] = np.zeros(shape, dtype=state[key].dtype)
                 self._samples['next_state'][key] = np.zeros(shape, dtype=state[key].dtype)
+                array_size = 1
+                for dim in list(state[key].shape):
+                    array_size *= dim
+                bytes_per_experience += self._samples['state'][key].itemsize * array_size * 2
 
             for key in action:
                 shape = tuple([self._max_steps] + [1])
                 self._samples['action'][key] = np.zeros(shape, dtype=np.int32)
+                bytes_per_experience += self._samples['action'][key].itemsize
+
+            print('Memory per experience: ' + utils.bytes_dec_to_bin(bytes_per_experience))
+            total_size = utils.bytes_dec_to_bin(bytes_per_experience * self._max_steps)
+            print('Total replay memory size (' + str(self._max_steps) + ' experiences): ' + total_size)
 
         # replace memory in index position
         for key in state:
