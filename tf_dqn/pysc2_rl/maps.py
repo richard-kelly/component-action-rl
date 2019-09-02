@@ -11,8 +11,8 @@ class MeleeMaps(lib.Map):
 
 
 mini_games = [
-    "8m_seperated",
-    "8m_seperated_LTD_on_death"
+    "8m_separated",
+    "8m_separated_LTD_on_death"
 ]
 
 
