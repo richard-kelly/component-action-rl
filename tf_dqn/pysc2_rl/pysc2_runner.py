@@ -15,6 +15,9 @@ from pysc2.env import sc2_env
 from tf_dqn.pysc2_rl.dqn_agent import DQNAgent
 from tf_dqn.common import utils
 
+# Isn't used here, but allows pysc2 to use the maps
+from tf_dqn.pysc2_rl.maps import MeleeMaps
+
 # Needed to satisfy something in pysc2, though I'm not actually using the flags
 FLAGS = flags.FLAGS
 FLAGS(sys.argv)
