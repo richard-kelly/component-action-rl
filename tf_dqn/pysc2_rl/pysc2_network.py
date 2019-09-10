@@ -453,10 +453,16 @@ class SC2Network:
         self._train_summaries = tf.summary.merge_all(scope='losses')
 
         with tf.variable_scope('episode_summaries'):
+            # score here might be a sparse win/loss +1/-1, or it might be a shaped reward signal
             self._episode_score = tf.placeholder(shape=[], dtype=tf.float32, name='episode_score')
             tf.summary.scalar('episode_score', self._episode_score)
             self._avg_episode_score = tf.placeholder(shape=[], dtype=tf.float32, name='avg_episode_score')
             tf.summary.scalar('avg_episode_score', self._avg_episode_score)
+            # episode_win is always going to be 1/-1/0, for win/loss/draw
+            self._episode_win = tf.placeholder(shape=[], dtype=tf.float32, name='episode_win')
+            tf.summary.scalar('episode_win', self._episode_win)
+            self._avg_episode_win = tf.placeholder(shape=[], dtype=tf.float32, name='avg_episode_win')
+            tf.summary.scalar('avg_episode_win', self._avg_episode_win)
             self._epsilon = tf.placeholder(shape=[], dtype=tf.float32, name='episode_ending_epsilon')
             tf.summary.scalar('episode_ending_epsilon', self._epsilon)
         self._episode_summaries = tf.summary.merge_all(scope='episode_summaries')
@@ -486,12 +492,14 @@ class SC2Network:
             keep_checkpoint_every_n_hours=self._checkpoint_hours
         )
 
-    def episode_summary(self, sess, score, avg_score_all_episodes, epsilon):
+    def episode_summary(self, sess, score, avg_score_all_episodes, win, avg_win, epsilon):
         return sess.run(
             self._episode_summaries,
             feed_dict={
                 self._episode_score: score,
                 self._avg_episode_score: avg_score_all_episodes,
+                self._episode_win: win,
+                self._avg_episode_win: avg_win,
                 self._epsilon: epsilon
             }
         )

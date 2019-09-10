@@ -4,6 +4,7 @@ import os
 import sys
 import datetime
 import random
+import re
 import tensorflow as tf
 
 from absl import flags
@@ -16,11 +17,18 @@ from tf_dqn.pysc2_rl.dqn_agent import DQNAgent
 from tf_dqn.common import utils
 
 # Isn't used here, but allows pysc2 to use the maps
-from tf_dqn.pysc2_rl.maps import MeleeMaps
+from tf_dqn.pysc2_rl.maps import CombatMaps
 
 # Needed to satisfy something in pysc2, though I'm not actually using the flags
 FLAGS = flags.FLAGS
 FLAGS(sys.argv)
+
+
+def get_win_loss(obs):
+    if obs.observation['player'][features.Player.food_used] > 0:
+        return 1
+    else:
+        return -1
 
 
 def get_action_function(obs, action, actions_in_use, screen_size, half_rect=20):
@@ -172,28 +180,47 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             map_name=config['env']['map_name'],
             players=[sc2_env.Agent(sc2_env.Race['random'], None)],
             agent_interface_format=features.AgentInterfaceFormat(
-                feature_dimensions=features.Dimensions(config['env']['screen_size'], config['env']['minimap_size'])
+                feature_dimensions=features.Dimensions(config['env']['screen_size'], config['env']['minimap_size']),
+                action_space=actions.ActionSpace.FEATURES
             ),
             visualize=config['env']['visualize'],
             step_mul=config['env']['step_mul']
     ) as env:
         tf.reset_default_graph()
-        with tf.Session() as sess:
+        tf_config = tf.ConfigProto()
+        tf_config.gpu_options.allow_growth = True
+        with tf.Session(config=tf_config) as sess:
             rl_agent = DQNAgent(sess, config, restore)
             # observations from the env are tuples of 1 Timestep per player
             obs = env.reset()[0]
             step = 0
             episode = 1
             episode_reward = 0
+
+            # Rewards from the map have to be integers,
+            # and some maps calculate normalized float rewards and then multiply them by some factor.
+            match = re.search(r"factor_(\d+)", config['env']['map_name'])
+            factor = float(match.group(1)) if match else 1.0
+
+            # For combat micro maps we may have a shaped reward or not, but we independently want to record win/loss
+            match = re.match(r"^combat", config['env']['map_name'])
+            win_loss = True if match else False
+
             while (config['max_steps'] == 0 or step <= config['max_steps']) and (config['max_episodes'] == 0 or episode <= config['max_episodes']):
                 step += 1
                 state = preprocess_state(obs, config['env']['computed_action_list'])
                 available_actions = obs.observation['available_actions']
 
-                episode_reward += obs.reward
+                step_reward = obs.reward / factor
+                episode_reward += step_reward
+                win = 0
                 if obs.step_type is StepType.LAST:
                     terminal = True
-                    print("Episode", episode, "finished. Score:", episode_reward)
+                    # if this map type uses this win/loss calc
+                    if win_loss:
+                        win = get_win_loss(obs)
+
+                    print("Episode", episode, "finished. Win:", win, "Score:", episode_reward)
                     if len(last_n_ep_score) == num_eps:
                         last_n_ep_score.pop(0)
                     last_n_ep_score.append(episode_reward)
@@ -206,7 +233,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                     terminal = False
 
                 if step > 1:
-                    rl_agent.observe(terminal=terminal, reward=obs.reward)
+                    rl_agent.observe(terminal=terminal, reward=step_reward, win=win)
 
                 action = rl_agent.act(state, available_actions)
                 action_for_sc = get_action_function(

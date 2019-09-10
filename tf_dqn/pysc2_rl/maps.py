@@ -1,8 +1,8 @@
 from pysc2.maps import lib
 
 
-class MeleeMaps(lib.Map):
-    directory = "rick_mini_games"
+class CombatMaps(lib.Map):
+    directory = "combat_scenarios"
     download = "https://example.com"
     players = 1
     score_index = 0
@@ -11,10 +11,13 @@ class MeleeMaps(lib.Map):
 
 
 mini_games = [
-    "8m_separated",
-    "8m_separated_LTD_on_death"
+    "combat_8m_v_8m_sparse_reward",
+    "combat_8m_v_8m_LTD_on_damage_norm_factor_100000",
+    "combat_8m_v_8m_LTD_on_death_norm_factor_100000",
+    "combat_8m_v_8m_LTD2_on_damage_norm_factor_100000",
+    "combat_8m_v_8m_LTD2_on_death_norm_factor_100000"
 ]
 
 
 for name in mini_games:
-    globals()[name] = type(name, (MeleeMaps,), dict(filename=name))
+    globals()[name] = type(name, (CombatMaps,), dict(filename=name))
