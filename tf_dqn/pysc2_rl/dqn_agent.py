@@ -18,9 +18,9 @@ class DQNAgent:
         self._average_episode_win = 0
         # if doing inference only, we don't need to populate the experience memory
         self._memory_start_size_reached = config['inference_only']
-        self._last_state = None
-        self._last_reward = None
-        self._last_action = None
+        self._last_state = []
+        self._last_reward = []
+        self._last_action = []
         self._sample_action = None
         self._config = config
 
@@ -54,6 +54,7 @@ class DQNAgent:
             self._config['double_DQN'],
             self._config['dueling_network'],
             self._config['learning_rate'],
+            self._config['bootstrapping_steps'],
             self._config['learning_rate_decay_method'],
             self._config['learning_rate_decay_steps'],
             self._config['learning_rate_decay_param'],
@@ -107,12 +108,14 @@ class DQNAgent:
 
         # don't store things in memory if only doing inference
         if not self._config['inference_only']:
-            self._last_reward = reward
+            for i in range(len(self._last_reward)):
+                self._last_reward[i-1] = self._last_reward[i-1] + reward * self._config['discount'] ** (i + 1)
+            self._last_reward.append(reward)
             # at end of episode store memory sample with None for next state
             # set last_state to None so that on next act() we know it is beginning of episode
             if terminal:
-                self._memory.add_sample(self._last_state, self._last_action, reward, None, True)
-                self._last_state = None
+                for i in range(len(self._last_state)):
+                    self._memory.add_sample(self._last_state.pop(0), self._last_action.pop(0), self._last_reward.pop(0), None, True)
                 self._episodes += 1
 
     def act(self, state, available_actions):
@@ -121,8 +124,8 @@ class DQNAgent:
 
         # if only doing inference no need to store anything in memory, update network, etc.
         if not self._config['inference_only']:
-            if self._last_state is not None:
-                self._memory.add_sample(self._last_state, self._last_action, self._last_reward, state, False)
+            if len(self._last_state) >= self._config['bootstrapping_steps']:
+                self._memory.add_sample(self._last_state.pop(0), self._last_action.pop(0), self._last_reward.pop(0), state, False)
 
             # update target network parameters occasionally
             if self._steps % self._config['target_update_frequency'] == 0:
@@ -147,8 +150,8 @@ class DQNAgent:
                 # only start changing epsilon once memory has reached minimum size
                 self._update_epsilon()
 
-            self._last_state = state
-            self._last_action = action
+            self._last_state.append(state)
+            self._last_action.append(action)
 
             self._memory_start_size_reached = self._memory.get_size() >= self._config['memory_burn_in']
 

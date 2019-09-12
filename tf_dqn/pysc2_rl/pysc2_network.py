@@ -11,6 +11,7 @@ class SC2Network:
             double_dqn,
             dueling,
             learning_rate,
+            bootstrapping_steps,
             learning_decay_mode,
             learning_decay_steps,
             learning_decay_param,
@@ -25,6 +26,7 @@ class SC2Network:
         self._double_dqn = double_dqn
         self._dueling = dueling
         self._learning_rate = learning_rate
+        self._bootstrapping_steps = bootstrapping_steps
         self._learning_decay = learning_decay_mode
         self._learning_decay_steps = learning_decay_steps
         self._learning_decay_factor = learning_decay_param
@@ -394,12 +396,12 @@ class SC2Network:
                     row = tf.range(tf.shape(action)[0])
                     combined = tf.stack([row, action], axis=1)
                     max_q_next = tf.gather_nd(self._q_target[name], combined)
-                    y_components[name] = (1 - self._terminal) * self._discount * max_q_next
+                    y_components[name] = (1 - self._terminal) * (self._discount ** self._bootstrapping_steps) * max_q_next
             else:
                 # DQN uses target network max Q val
                 for name, q_vals in self._q_target.items():
                     max_q_next_by_target = tf.reduce_max(q_vals, axis=-1, name=name)
-                    y_components[name] = (1 - self._terminal) * self._discount * max_q_next_by_target
+                    y_components[name] = (1 - self._terminal) * (self._discount ** self._bootstrapping_steps) * max_q_next_by_target
             y_components_masked = []
             # get vector of 0s of correct length
             num_components = self._rewards * 0
