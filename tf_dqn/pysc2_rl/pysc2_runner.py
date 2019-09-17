@@ -164,17 +164,23 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         with open(config['model_dir'] + '/config.json', 'w+') as fp:
             fp.write(json.dumps(config, indent=4))
 
+    num_eps = 20
     max_ep_score = None
     all_ep_scores = []
-    num_eps = 20
     last_n_ep_score = []
+    all_ep_wins = []
+    last_n_ep_wins = []
+    win_count = 0
 
     if output_file is not None and not os.path.isfile(output_file):
         with open(output_file, 'a+') as f:
             params = ''
             for name in run_variables:
                 params += name + ' '
-            f.write('Run_Name Run_num ' + params + 'Max_Score Avg_Score Last_' + str(num_eps) + '_Score\n')
+            run_info = 'Run_Name Run_num ' + params
+            score_info = 'Max_Score Avg_Score Last_' + str(num_eps) + '_Score '
+            win_info = 'Avg_Win_Val Last_' + str(num_eps) + '_Win_Val Win_%\n'
+            f.write(run_info + score_info + win_info)
 
     with sc2_env.SC2Env(
             map_name=config['env']['map_name'],
@@ -219,12 +225,17 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                     # if this map type uses this win/loss calc
                     if win_loss:
                         win = get_win_loss(obs)
+                        if win == 1:
+                            win_count += 1
 
                     print("Episode", episode, "finished. Win:", win, "Score:", episode_reward)
                     if len(last_n_ep_score) == num_eps:
                         last_n_ep_score.pop(0)
+                        last_n_ep_wins.pop(0)
                     last_n_ep_score.append(episode_reward)
+                    last_n_ep_wins.append(win)
                     all_ep_scores.append(episode_reward)
+                    all_ep_wins.append(win)
                     if max_ep_score is None or episode_reward > max_ep_score:
                         max_ep_score = episode_reward
                     episode_reward = 0
@@ -250,10 +261,12 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         with open(output_file, 'a+') as f:
             avg_last = sum(last_n_ep_score) / len(last_n_ep_score)
             avg = sum(all_ep_scores) / len(all_ep_scores)
+            avg_win_last = sum(last_n_ep_wins) / len(last_n_ep_wins)
+            avg_wins = sum(all_ep_wins) / len(all_ep_wins)
             run_var_vals = ''
             for _, val in run_variables.items():
                 run_var_vals += ' ' + '{:.2e}'.format(val)
-            f.write(config['model_dir'] + ' ' + str(run_num) + run_var_vals + ' ' + str(max_ep_score) + ' ' + str(avg) + ' ' + str(avg_last) + '\n')
+            f.write(config['model_dir'] + ' ' + str(run_num) + run_var_vals + ' ' + str(max_ep_score) + ' ' + str(avg) + ' ' + str(avg_last) + ' ' + str(avg_wins) + ' ' + str(avg_win_last) + ' ' + str(win_count / episode) + '\n')
 
 
 def main():
