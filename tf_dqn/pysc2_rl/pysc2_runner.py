@@ -299,6 +299,11 @@ def main():
                 run_variables[param] = new_val
                 config[param] = new_val
                 name += '_' + param + '_' + '{:.2e}'.format(config[param])
+            for param in batch['random_int']:
+                new_val = random.randint(batch['random_int'][param]['min'], batch['random_int'][param]['max'])
+                run_variables[param] = new_val
+                config[param] = new_val
+                name += '_' + param + '_' + str(new_val)
             config['model_dir'] = base_name + '/' + name
             print('****** Starting a new run in this batch: ' + name + ' ******')
             run_one_env(config, count, run_variables, rename_if_duplicate=True, output_file=summary_file_name)
