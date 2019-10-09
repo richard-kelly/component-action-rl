@@ -104,6 +104,35 @@ def compute_action_list(rules):
 def process_config_env(config):
     config['env']['computed_action_list'] = compute_action_list(config['env']['action_functions'])
 
+    # modify the list of computed actions based on the map name for maps that pre-select units or have control groups pre-assigned
+    preselected = False
+    num_groups = 0
+    match = re.search(r"select_all", config['env']['map_name'])
+    if match:
+        # all units are pre-selected, no groups
+        preselected = True
+    match = re.search(r"select_(\d+)", config['env']['map_name'])
+    if match:
+        num_groups = int(match.group(1))
+
+    if preselected or num_groups > 0:
+        # remove all selection functions
+        select_functions = [2, 3, 4, 5, 6, 7, 8, 9]
+        to_remove = []
+        for func in config['env']['computed_action_list']:
+            if func in select_functions:
+                to_remove.append(func)
+        for func in to_remove:
+            config['env']['computed_action_list'].remove(func)
+    if num_groups > 0:
+        # if we have preselected groups, add back in control groups
+        control_group_func_id = 4
+        config['env']['computed_action_list'].append(control_group_func_id)
+        # only select the pre-existing control groups
+        config['env']['num_control_groups'] = num_groups
+    else:
+        config['env']['num_control_groups'] = 10
+
     all_components = dict(
         function=True,
         screen=False,
@@ -133,6 +162,10 @@ def process_config_env(config):
         all_components['queued'] = False
     if not config['env']['use_screen2']:
         all_components['screen2'] = False
+
+    # if we have pre selected control groups, agent should only be able to select/recall a control group (which is 0)
+    if num_groups > 0:
+        all_components['control_group_act'] = False
 
     config['env']['computed_action_components'] = all_components
     return config

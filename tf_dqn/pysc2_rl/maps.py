@@ -15,7 +15,8 @@ mini_games = [
     "combat_8m_v_8m_LTD_on_damage_norm_factor_1000",
     "combat_8m_v_8m_LTD_on_death_norm_factor_1000",
     "combat_8m_v_8m_LTD2_on_damage_norm_factor_1000",
-    "combat_8m_v_8m_LTD2_on_death_norm_factor_1000"
+    "combat_8m_v_8m_LTD2_on_death_norm_factor_1000",
+    "combat_8m_v_8m_LTD2_on_damage_norm_factor_1000_select_all"
 ]
 
 

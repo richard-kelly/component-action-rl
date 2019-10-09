@@ -43,6 +43,7 @@ class SC2Network:
         self._minimap_size = environment_properties['minimap_size']
         self._action_components = environment_properties['computed_action_components']
         self._action_list = environment_properties['computed_action_list']
+        self._num_control_groups = environment_properties['num_control_groups']
 
         # define the placeholders
         self._global_step = None
@@ -210,24 +211,23 @@ class SC2Network:
         else:
             spatial_policy_2 = None
 
-        n = self._screen_size
-        m = self._minimap_size
         comp = self._action_components
+        num_options = self._get_num_options_per_function()
         action_q_vals = dict(
-            function=tf.layers.dense(fc_non_spatial_2, len(self._action_list), name='function'),
-            screen=tf.reshape(spatial_policy_1, [-1, n * n], name='screen') if comp['screen'] else None,
-            minimap=tf.reshape(spatial_policy_1, [-1, m * m], name='minimap') if comp['minimap'] else None,
-            screen2=tf.reshape(spatial_policy_2, [-1, n * n], name='screen2') if comp['screen2'] else None,
-            queued=tf.layers.dense(fc_non_spatial_2, 2, name='queued') if comp['queued'] else None,
-            control_group_act=tf.layers.dense(fc_non_spatial_2, 5, name='control_group_act') if comp['control_group_act'] else None,
-            control_group_id=tf.layers.dense(fc_non_spatial_2, 10, name='control_group_id') if comp['control_group_id'] else None,
-            select_point_act=tf.layers.dense(fc_non_spatial_2, 4, name='select_point_act') if comp['select_point_act'] else None,
-            select_add=tf.layers.dense(fc_non_spatial_2, 2, name='select_add') if comp['select_add'] else None,
-            select_unit_act=tf.layers.dense(fc_non_spatial_2, 4, name='select_unit_act') if comp['select_unit_act'] else None,
-            select_unit_id=tf.layers.dense(fc_non_spatial_2, 500, name='select_unit_id') if comp['select_unit_id'] else None,
-            select_worker=tf.layers.dense(fc_non_spatial_2, 4, name='select_worker') if comp['select_worker'] else None,
-            build_queue_id=tf.layers.dense(fc_non_spatial_2, 10, name='build_queue_id') if comp['build_queue_id'] else None,
-            unload_id=tf.layers.dense(fc_non_spatial_2, 500, name='unload_id') if comp['unload_id'] else None,
+            function=tf.layers.dense(fc_non_spatial_2, num_options['function'], name='function'),
+            screen=tf.reshape(spatial_policy_1, [-1, num_options['screen']], name='screen') if comp['screen'] else None,
+            minimap=tf.reshape(spatial_policy_1, [-1, num_options['minimap']], name='minimap') if comp['minimap'] else None,
+            screen2=tf.reshape(spatial_policy_2, [-1, num_options['screen2']], name='screen2') if comp['screen2'] else None,
+            queued=tf.layers.dense(fc_non_spatial_2, num_options['queued'], name='queued') if comp['queued'] else None,
+            control_group_act=tf.layers.dense(fc_non_spatial_2, num_options['control_group_act'], name='control_group_act') if comp['control_group_act'] else None,
+            control_group_id=tf.layers.dense(fc_non_spatial_2, num_options['control_group_id'], name='control_group_id') if comp['control_group_id'] else None,
+            select_point_act=tf.layers.dense(fc_non_spatial_2, num_options['select_point_act'], name='select_point_act') if comp['select_point_act'] else None,
+            select_add=tf.layers.dense(fc_non_spatial_2, num_options['select_add'], name='select_add') if comp['select_add'] else None,
+            select_unit_act=tf.layers.dense(fc_non_spatial_2, num_options['select_unit_act'], name='select_unit_act') if comp['select_unit_act'] else None,
+            select_unit_id=tf.layers.dense(fc_non_spatial_2, num_options['select_unit_id'], name='select_unit_id') if comp['select_unit_id'] else None,
+            select_worker=tf.layers.dense(fc_non_spatial_2, num_options['select_worker'], name='select_worker') if comp['select_worker'] else None,
+            build_queue_id=tf.layers.dense(fc_non_spatial_2, num_options['build_queue_id'], name='build_queue_id') if comp['build_queue_id'] else None,
+            unload_id=tf.layers.dense(fc_non_spatial_2, num_options['unload_id'], name='unload_id') if comp['unload_id'] else None,
         )
 
         action_q_vals_filtered = {}
@@ -294,18 +294,16 @@ class SC2Network:
 
         return masks
 
-    def _get_action_one_hot(self, actions):
-        # action components we are using.
-        comp = self._action_components
-        # number of options for function args hard coded here... probably won't change in pysc2
-        num_options = dict(
+    def _get_num_options_per_function(self):
+        # this is hopefully the only place this has to be hard coded
+        return dict(
             function=len(self._action_list),
             screen=self._screen_size * self._screen_size,
             minimap=self._minimap_size * self._minimap_size,
             screen2=self._screen_size * self._screen_size,
             queued=2,
             control_group_act=5,
-            control_group_id=10,
+            control_group_id=self._num_control_groups,
             select_point_act=4,
             select_add=2,
             select_unit_act=4,
@@ -314,6 +312,12 @@ class SC2Network:
             build_queue_id=10,
             unload_id=500
         )
+
+    def _get_action_one_hot(self, actions):
+        # action components we are using.
+        comp = self._action_components
+        # number of options for function args hard coded here... probably won't change in pysc2
+        num_options = self._get_num_options_per_function()
 
         action_one_hot = {}
         for name, using in comp.items():
