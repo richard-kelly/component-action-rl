@@ -315,9 +315,17 @@ def main():
 
     if config['use_batch']:
         base_name = config['model_dir']
-        time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        summary_file_name = base_name + '/_' + time + '_batch_summary.csv'
+        summary_file_name = base_name + '/batch_summary.csv'
         count = 0
+
+        # if we're restarting a run, continue numbering starting from number at end of file
+        if os.path.isfile(summary_file_name):
+            with open(summary_file_name, 'r') as summary:
+                for line in summary:
+                    words = line.split()
+                    if len(words) > 1 and words[0] != 'Run_Name':
+                        count = int(words[1])
+
         while True:
             count += 1
             name = str(count)
