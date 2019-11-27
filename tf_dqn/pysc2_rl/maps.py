@@ -16,7 +16,12 @@ mini_games = [
     "combat_8m_v_8m_LTD_on_death_norm_factor_1000",
     "combat_8m_v_8m_LTD2_on_damage_norm_factor_1000",
     "combat_8m_v_8m_LTD2_on_death_norm_factor_1000",
-    "combat_8m_v_8m_LTD2_on_damage_norm_factor_1000_select_all"
+    "combat_8m_v_8m_LTD2_on_damage_norm_factor_1000_select_all",
+    "combat_4zeal_4stalk_LTD2_on_damage_norm_factor_1000",
+    "combat_4zeal_4stalk_LTD2_on_damage_norm_factor_1000_select_2",
+    "combat_4zeal_4stalk_EASY_LTD2_on_damage_norm_factor_1000",
+    "combat_4zeal_4stalk_EASY_LTD2_on_damage_norm_factor_1000_select_2",
+    "combat_5m_LTD2_on_damage_norm_factor_1000"
 ]
 
 
