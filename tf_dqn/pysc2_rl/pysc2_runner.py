@@ -313,7 +313,7 @@ def main():
     with open('batch.json', 'r') as fp:
         batch = json.load(fp=fp)
 
-    if config['use_batch']:
+    if config['use_batch'] and not config['inference_only']:
         base_name = config['model_dir']
         summary_file_name = base_name + '/batch_summary.csv'
         count = 0
