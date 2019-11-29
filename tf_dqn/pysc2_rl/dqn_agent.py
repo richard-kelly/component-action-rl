@@ -51,19 +51,7 @@ class DQNAgent:
             self._memory = LatestReplayMemory(self._config['memory_size'])
 
         self._network = SC2Network(
-            self._config['double_DQN'],
-            self._config['dueling_network'],
-            self._config['learning_rate'],
-            self._config['bootstrapping_steps'],
-            self._config['learning_rate_decay_method'],
-            self._config['learning_rate_decay_steps'],
-            self._config['learning_rate_decay_param'],
-            self._config['discount'],
-            self._config['model_checkpoint_max'],
-            self._config['model_checkpoint_every_n_hours'],
-            self._config['reg_type'],
-            self._config['reg_scale'],
-            self._config['env']
+            self._config
         )
         self._sess = sess
         self._writer = tf.summary.FileWriter(self._config['model_dir'], self._sess.graph)

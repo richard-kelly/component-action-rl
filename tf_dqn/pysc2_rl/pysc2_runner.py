@@ -25,6 +25,7 @@ FLAGS(sys.argv)
 
 
 def get_win_loss(obs):
+    # if we're not using any food, then we don't have any units (and have lost)
     if obs.observation['player'][features.Player.food_used] > 0:
         return 1
     else:
@@ -101,6 +102,7 @@ def compute_action_list(rules):
     return computed
 
 
+# Add some extra properties to the config['env'] section that will be used by the Network
 def process_config_env(config):
     config['env']['computed_action_list'] = compute_action_list(config['env']['action_functions'])
 
@@ -171,15 +173,31 @@ def process_config_env(config):
     return config
 
 
-def preprocess_state(obs, actions_in_use):
+def preprocess_state(obs, actions_in_use, config):
     avail_actions = np.in1d(actions_in_use, obs.observation['available_actions'])
+
+    unit_types = obs.observation['feature_screen'].unit_type
+    if simple_unit_types:
+        unique_units = np.unique(np.array(unit_types))
+
+        for i in range(1, len(unique_units)):
+            # skip zero since that is the defualt value representing no units
+            unit_types[unit_types == unique_units[i]] = i
 
     state = dict(
         screen_player_relative=obs.observation['feature_screen'].player_relative,
         screen_selected=obs.observation['feature_screen'].selected,
         screen_unit_hit_points=obs.observation['feature_screen'].unit_hit_points,
+        screen_unit_hit_points_ratio=obs.observation['feature_screen'].unit_hit_points_ratio,
+        screen_unit_shields=obs.observation['feature_screen'].unit_shields,
+        screen_unit_shields_ratio=obs.observation['feature_screen'].unit_shields_ratio,
+        # screen_unit_type=unit_types,
         available_actions=avail_actions
     )
+
+    if config['env']['use_all_unit_types']:
+        state['screen_unit_type'] = obs.observation['feature_screen'].unit_type
+
     return state
 
 
@@ -216,14 +234,15 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             f.write(run_info + score_info + win_info)
 
     with sc2_env.SC2Env(
-            map_name=config['env']['map_name'],
-            players=[sc2_env.Agent(sc2_env.Race['random'], None)],
-            agent_interface_format=features.AgentInterfaceFormat(
-                feature_dimensions=features.Dimensions(config['env']['screen_size'], config['env']['minimap_size']),
-                action_space=actions.ActionSpace.FEATURES
-            ),
-            visualize=config['env']['visualize'],
-            step_mul=config['env']['step_mul']
+        map_name=config['env']['map_name'],
+        players=[sc2_env.Agent(sc2_env.Race['random'], None)],
+        agent_interface_format=features.AgentInterfaceFormat(
+            feature_dimensions=features.Dimensions(config['env']['screen_size'], config['env']['minimap_size']),
+            action_space=actions.ActionSpace.FEATURES
+        ),
+        visualize=config['env']['visualize'],
+        step_mul=config['env']['step_mul'],
+        realtime=config['realtime']
     ) as env:
         tf.reset_default_graph()
         tf_config = tf.ConfigProto()
@@ -247,7 +266,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
 
             while (config['max_steps'] == 0 or step <= config['max_steps']) and (config['max_episodes'] == 0 or episode <= config['max_episodes']):
                 step += 1
-                state = preprocess_state(obs, config['env']['computed_action_list'])
+                state = preprocess_state(obs, config['env']['computed_action_list'], config['env']['simple_unit_types'])
                 available_actions = obs.observation['available_actions']
 
                 step_reward = obs.reward / factor
@@ -304,52 +323,68 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
 
 def main():
     # load configuration
-    with open('pysc2_config.json', 'r') as fp:
-        config = json.load(fp=fp)
+    config_paths = ['pysc2_config.json']
+    if len(sys.argv) > 1:
+        if os.path.isdir(sys.argv[1]):
+            # if arg is a dir, we have a dir of config files to be run
+            config_files = os.listdir(sys.argv[1])
+            config_paths = []
+            for file in config_files:
+                config_paths.append(os.path.join(sys.argv[1], file))
+        else:
+            # if it's a file, we just want that file
+            config_paths = [sys.argv[1]]
 
-    config = process_config_env(config)
+    for config_file in config_paths:
+        with open(config_file, 'r') as fp:
+            config = json.load(fp=fp)
 
-    # load batch config file
-    with open('batch.json', 'r') as fp:
-        batch = json.load(fp=fp)
+        config = process_config_env(config)
 
-    if config['use_batch'] and not config['inference_only']:
-        base_name = config['model_dir']
-        summary_file_name = base_name + '/batch_summary.csv'
-        count = 0
+        # load batch config file
+        with open(config['batch_file'], 'r') as fp:
+            batch = json.load(fp=fp)
 
-        # if we're restarting a run, continue numbering starting from number at end of file
-        if os.path.isfile(summary_file_name):
-            with open(summary_file_name, 'r') as summary:
-                for line in summary:
-                    words = line.split()
-                    if len(words) > 1 and words[0] != 'Run_Name':
-                        count = int(words[1])
+        if config['use_batch'] and not config['inference_only']:
+            base_name = config['model_dir']
+            summary_file_name = base_name + '/batch_summary.csv'
+            count = 0
 
-        while True:
-            count += 1
-            name = str(count)
-            run_variables = {}
-            for param in batch['log_random']:
-                new_val = utils.log_uniform(batch['log_random'][param]['min'], batch['log_random'][param]['max'])
-                run_variables[param] = new_val
-                config[param] = new_val
-                name += '_' + param + '_' + '{:.2e}'.format(config[param])
-            for param in batch['random']:
-                new_val = random.uniform(batch['random'][param]['min'], batch['random'][param]['max'])
-                run_variables[param] = new_val
-                config[param] = new_val
-                name += '_' + param + '_' + '{:.2e}'.format(config[param])
-            for param in batch['random_int']:
-                new_val = random.randint(batch['random_int'][param]['min'], batch['random_int'][param]['max'])
-                run_variables[param] = new_val
-                config[param] = new_val
-                name += '_' + param + '_' + str(new_val)
-            config['model_dir'] = base_name + '/' + name
-            print('****** Starting a new run in this batch: ' + name + ' ******')
-            run_one_env(config, count, run_variables, rename_if_duplicate=True, output_file=summary_file_name)
-    else:
-        run_one_env(config, rename_if_duplicate=False)
+            # if we're restarting a run, continue numbering starting from number at end of file
+            if os.path.isfile(summary_file_name):
+                with open(summary_file_name, 'r') as summary:
+                    for line in summary:
+                        words = line.split()
+                        if len(words) > 1 and words[0] != 'Run_Name':
+                            count = int(words[1])
+
+            for _ in range(config['batch_runs']):
+                count += 1
+                # for if we are restarting a run (so range above is really useless)
+                if count > config['batch_runs']:
+                    break
+                name = str(count)
+                run_variables = {}
+                for param in batch['log_random']:
+                    new_val = utils.log_uniform(batch['log_random'][param]['min'], batch['log_random'][param]['max'])
+                    run_variables[param] = new_val
+                    config[param] = new_val
+                    name += '_' + param + '_' + '{:.2e}'.format(config[param])
+                for param in batch['random']:
+                    new_val = random.uniform(batch['random'][param]['min'], batch['random'][param]['max'])
+                    run_variables[param] = new_val
+                    config[param] = new_val
+                    name += '_' + param + '_' + '{:.2e}'.format(config[param])
+                for param in batch['random_int']:
+                    new_val = random.randint(batch['random_int'][param]['min'], batch['random_int'][param]['max'])
+                    run_variables[param] = new_val
+                    config[param] = new_val
+                    name += '_' + param + '_' + str(new_val)
+                config['model_dir'] = base_name + '/' + name
+                print('****** Starting a new run in this batch: ' + name + ' ******')
+                run_one_env(config, count, run_variables, rename_if_duplicate=True, output_file=summary_file_name)
+        else:
+            run_one_env(config, rename_if_duplicate=False)
 
 
 if __name__ == "__main__":

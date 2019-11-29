@@ -6,5 +6,16 @@
 
     },
     "random_int":{
+
+    },
+    "test": {
+        "learning_rate": {
+            "min": 1e-6,
+            "max": 5e-3
+        },
+        "reg_scale": {
+            "min": 1e-6,
+            "max": 5e-3
+        }
     }
 }
