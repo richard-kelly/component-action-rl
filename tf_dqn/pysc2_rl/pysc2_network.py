@@ -59,13 +59,14 @@ class SC2Network:
         # NEUTRAL = 3
         # ENEMY = 4
         screen_player_relative_self = screen_player_relative_one_hot[:, :, :, 1]
+        screen_player_relative_self = tf.expand_dims(screen_player_relative_self, axis=-1)
         screen_player_relative_enemy = screen_player_relative_one_hot[:, :, :, 4]
+        screen_player_relative_enemy = tf.expand_dims(screen_player_relative_enemy, axis=-1)
 
-        # throw away first layer that has zeros
-        # screen_selected_one_hot = tf.contrib.layers.one_hot_encoding(
-        #     labels=inputs['screen_selected'],
-        #     num_classes=2
-        # )[:, :, :, 1:]
+        # observation is in int, but network uses floats
+        # selected is binary, just 1 or 0, so is already in one hot form
+        screen_selected_one_hot = tf.cast(inputs['screen_selected'], dtype=tf.float32)
+        screen_selected_one_hot = tf.expand_dims(screen_selected_one_hot, axis=-1)
 
         # scale hit points (0-?) logarithmically (add 1 to avoid undefined) since they can be so high
         screen_unit_hit_points = tf.math.log1p(tf.cast(inputs['screen_unit_hit_points'], dtype=tf.float32))
@@ -81,30 +82,35 @@ class SC2Network:
         screen_unit_shields_ratio = tf.cast(inputs['screen_unit_shields_ratio'] / 255, dtype=tf.float32)
         screen_unit_shields_ratio = tf.expand_dims(screen_unit_shields_ratio, axis=-1)
 
-        # if config['env']['simple_unit_types']:
-        #     screen_unit_type = tf.contrib.layers.one_hot_encoding(
-        #         labels=inputs['screen_unit_type'],
-        #         num_classes=2
-        #     )[:, :, :, 1:]
-        # else:
-        #     # pysc2 has a list of known unit types, and the max unit id is around 2000 but the actual number is ~259
-        #     # for now using the full ~2000 categories, and 4th root of that is ~7
-        #     # embedding output dims: [batch_size, screen y, screen x, output_dim]
-        #     screen_unit_type = tf.keras.layers.Embedding(
-        #         input_dim=max(pysc2_static_data.UNIT_TYPES) + 1,
-        #         output_dim=7
-        #     )(inputs['screen_unit_type'])
+        screen_unit_type = None
+        if self._config['env']['use_all_unit_types']:
+            # pysc2 has a list of known unit types, and the max unit id is around 2000 but there are 259  units (v3.0)
+            # 4th root of 259 is ~4 (Google rule of thumb for ratio of embedding dimensions to number of categories)
+            # https://developers.googleblog.com/2017/11/introducing-tensorflow-feature-columns.html
+            # embedding output: [batch_size, screen y, screen x, output_dim]
+            screen_unit_type = tf.keras.layers.Embedding(
+                input_dim=len(pysc2_static_data.UNIT_TYPES),
+                output_dim=4
+            )(inputs['screen_unit_type'])
+        elif self._config['env']['use_specific_unit_types']:
+            screen_unit_type = tf.contrib.layers.one_hot_encoding(
+                labels=inputs['screen_unit_type'],
+                num_classes=len(self._config['env']['specific_unit_types'])
+            )[:, :, :, 1:]
+            # above throws away first layer that has zeros
 
         to_concat = [
             screen_player_relative_self,
             screen_player_relative_enemy,
-            inputs['screen_selected'],
+            screen_selected_one_hot,
             screen_unit_hit_points,
             screen_unit_hit_points_ratio,
             screen_unit_shields,
             screen_unit_shields_ratio,
-            # screen_unit_type
         ]
+
+        if screen_unit_type is not None:
+            to_concat.append(screen_unit_type)
 
         screen = tf.concat(to_concat, axis=-1, name='screen_input')
 
@@ -279,48 +285,52 @@ class SC2Network:
 
     def _get_state_placeholder(self):
         screen_shape = [None, self._config['env']['screen_size'], self._config['env']['screen_size']]
-        return dict(
-                screen_player_relative=tf.placeholder(
-                    shape=screen_shape,
-                    dtype=tf.int32,
-                    name='screen_player_relative'
-                ),
-                screen_selected=tf.placeholder(
-                    shape=screen_shape,
-                    dtype=tf.int32,
-                    name='screen_selected'
-                ),
-                screen_unit_hit_points=tf.placeholder(
-                    shape=screen_shape,
-                    dtype=tf.int32,
-                    name='screen_unit_hit_points'
-                ),
-                screen_unit_hit_points_ratio=tf.placeholder(
-                    shape=screen_shape,
-                    dtype=tf.int32,
-                    name='screen_unit_hit_points_ratio'
-                ),
-                screen_unit_shields=tf.placeholder(
-                    shape=screen_shape,
-                    dtype=tf.int32,
-                    name='screen_unit_shields'
-                ),
-                screen_unit_shields_ratio=tf.placeholder(
-                    shape=screen_shape,
-                    dtype=tf.int32,
-                    name='screen_unit_shields_ratio'
-                ),
-                # screen_unit_type=tf.placeholder(
-                #     shape=screen_shape,
-                #     dtype=tf.int32,
-                #     name='screen_unit_type'
-                # ),
-                available_actions=tf.placeholder(
-                    shape=[None, len(self._action_list)],
-                    dtype=tf.bool,
-                    name='available_actions'
-                )
+        state_placeholder = dict(
+            screen_player_relative=tf.placeholder(
+                shape=screen_shape,
+                dtype=tf.int32,
+                name='screen_player_relative'
+            ),
+            screen_selected=tf.placeholder(
+                shape=screen_shape,
+                dtype=tf.int32,
+                name='screen_selected'
+            ),
+            screen_unit_hit_points=tf.placeholder(
+                shape=screen_shape,
+                dtype=tf.int32,
+                name='screen_unit_hit_points'
+            ),
+            screen_unit_hit_points_ratio=tf.placeholder(
+                shape=screen_shape,
+                dtype=tf.int32,
+                name='screen_unit_hit_points_ratio'
+            ),
+            screen_unit_shields=tf.placeholder(
+                shape=screen_shape,
+                dtype=tf.int32,
+                name='screen_unit_shields'
+            ),
+            screen_unit_shields_ratio=tf.placeholder(
+                shape=screen_shape,
+                dtype=tf.int32,
+                name='screen_unit_shields_ratio'
+            ),
+            available_actions=tf.placeholder(
+                shape=[None, len(self._action_list)],
+                dtype=tf.bool,
+                name='available_actions'
             )
+        )
+
+        if self._config['env']['use_all_unit_types'] or self._config['env']['use_specific_unit_types']:
+            state_placeholder['screen_unit_type'] =tf.placeholder(
+                shape=screen_shape,
+                dtype=tf.int32,
+                name='screen_unit_type'
+            )
+
+        return state_placeholder
 
     def _get_argument_masks(self):
         masks = dict(function=tf.constant([1] * len(self._action_list), dtype=tf.float32, name='function'))

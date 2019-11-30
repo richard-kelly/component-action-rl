@@ -10,6 +10,8 @@ import tensorflow as tf
 from absl import flags
 from pysc2.lib import actions
 from pysc2.lib import features
+from pysc2.lib import static_data
+from pysc2.lib import units
 from pysc2.env.environment import StepType
 from pysc2.env import sc2_env
 
@@ -32,7 +34,11 @@ def get_win_loss(obs):
         return -1
 
 
-def get_action_function(obs, action, actions_in_use, screen_size, half_rect=20):
+def get_action_function(obs, action, config):
+    actions_in_use = config['env']['computed_action_list']
+    screen_size = config['env']['screen_size']
+    half_rect = config['env']['select_rect_half_size']
+
     # id = action['function']
     # Masked actions instead
     func_id = actions_in_use[action['function']]
@@ -69,6 +75,9 @@ def get_action_function(obs, action, actions_in_use, screen_size, half_rect=20):
                 args.append([0])
             else:
                 args.append([action[name]])
+
+    if config['log_action_descriptions']:
+        print(pysc2_funcs[func_id].name, ':', args)
     return actions.FunctionCall(func_id, args)
 
 
@@ -76,6 +85,18 @@ def get_screen_coords(val, screen_size):
     y = val // screen_size
     x = val % screen_size
     return x, y
+
+
+def get_unit_ids(unit_list):
+    unit_ids = []
+    for unit in unit_list:
+        if unit in units.Terran.__members__:
+            unit_ids.append(int(units.Terran[unit]))
+        if unit in units.Protoss.__members__:
+            unit_ids.append(int(units.Protoss[unit]))
+        if unit in units.Zerg.__members__:
+            unit_ids.append(int(units.Zerg[unit]))
+    return unit_ids
 
 
 def compute_action_list(rules):
@@ -170,19 +191,33 @@ def process_config_env(config):
         all_components['control_group_act'] = False
 
     config['env']['computed_action_components'] = all_components
+
+    # compute list of unit ids we care about for unit types
+    config['env']['specific_unit_type_ids'] = get_unit_ids(config['env']['specific_unit_types'])
+
     return config
 
 
-def preprocess_state(obs, actions_in_use, config):
+def preprocess_state(obs, config):
+    actions_in_use = config['env']['computed_action_list']
     avail_actions = np.in1d(actions_in_use, obs.observation['available_actions'])
 
     unit_types = obs.observation['feature_screen'].unit_type
-    if simple_unit_types:
-        unique_units = np.unique(np.array(unit_types))
-
-        for i in range(1, len(unique_units)):
-            # skip zero since that is the defualt value representing no units
-            unit_types[unit_types == unique_units[i]] = i
+    if config['env']['use_all_unit_types']:
+        modified_unit_types = np.zeros(unit_types.shape, dtype=np.int32)
+        for i in range(len(static_data.UNIT_TYPES)):
+            # skip zero since that is the default value representing no units
+            modified_unit_types[unit_types == static_data.UNIT_TYPES[i]] = i + 1
+        unit_types = modified_unit_types
+    elif config['env']['use_specific_unit_types']:
+        modified_unit_types = np.zeros(unit_types.shape, dtype=np.int32)
+        unique_units = config['env']['specific_unit_type_ids']
+        for i in range(len(unique_units)):
+            # skip zero since that is the default value representing no units
+            modified_unit_types[unit_types == unique_units[i]] = i + 1
+        unit_types = modified_unit_types
+    else:
+        unit_types = None
 
     state = dict(
         screen_player_relative=obs.observation['feature_screen'].player_relative,
@@ -191,12 +226,11 @@ def preprocess_state(obs, actions_in_use, config):
         screen_unit_hit_points_ratio=obs.observation['feature_screen'].unit_hit_points_ratio,
         screen_unit_shields=obs.observation['feature_screen'].unit_shields,
         screen_unit_shields_ratio=obs.observation['feature_screen'].unit_shields_ratio,
-        # screen_unit_type=unit_types,
         available_actions=avail_actions
     )
 
-    if config['env']['use_all_unit_types']:
-        state['screen_unit_type'] = obs.observation['feature_screen'].unit_type
+    if unit_types is not None:
+        state['screen_unit_type'] = unit_types
 
     return state
 
@@ -266,7 +300,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
 
             while (config['max_steps'] == 0 or step <= config['max_steps']) and (config['max_episodes'] == 0 or episode <= config['max_episodes']):
                 step += 1
-                state = preprocess_state(obs, config['env']['computed_action_list'], config['env']['simple_unit_types'])
+                state = preprocess_state(obs, config)
                 available_actions = obs.observation['available_actions']
 
                 step_reward = obs.reward / factor
@@ -299,13 +333,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                     rl_agent.observe(terminal=terminal, reward=step_reward, win=win)
 
                 action = rl_agent.act(state, available_actions)
-                action_for_sc = get_action_function(
-                    obs,
-                    action,
-                    config['env']['computed_action_list'],
-                    config['env']['screen_size'],
-                    half_rect=config['env']['select_rect_half_size']
-                )
+                action_for_sc = get_action_function(obs, action, config)
                 # actions passed into env.step() are in a list with one action per player
                 obs = env.step([action_for_sc])[0]
 

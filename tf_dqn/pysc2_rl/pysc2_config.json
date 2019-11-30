@@ -5,6 +5,7 @@
     "inference_only": false,
     "inference_only_epsilon": 0,
     "realtime": false,
+    "log_action_descriptions": false,
 
     "model_dir": "models/5m_nov_22",
     "model_checkpoint_frequency": 100000,
@@ -76,7 +77,7 @@
         "use_screen2": true,
         "select_rect_half_size": 20,
         "use_all_unit_types": false,
-        "num_unique_units": 0,
-        "simple_unit_types": true
+        "use_specific_unit_types": false,
+        "specific_unit_types": ["Marine", "Stalker"]
     }
 }
