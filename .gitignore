@@ -21,3 +21,4 @@ tf_dqn/mrts_rl/__pycache__/
 tf_dqn/mrts_rl/models/
 tf_dqn/mrts_rl/microrts/
 tf_dqn/pysc2_rl/old_models/
+tf_dqn/pysc2_rl/experiments/
