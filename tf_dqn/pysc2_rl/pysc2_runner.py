@@ -259,13 +259,14 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
 
     if output_file is not None and not os.path.isfile(output_file):
         with open(output_file, 'a+') as f:
-            params = ''
+            params = []
             for name in run_variables:
-                params += name + ' '
-            run_info = 'Run_Name Run_num ' + params
-            score_info = 'Max_Score Avg_Score Last_' + str(num_eps) + '_Score '
-            win_info = 'Avg_Win_Val Last_' + str(num_eps) + '_Win_Val Win_%\n'
-            f.write(run_info + score_info + win_info)
+                params.append(name)
+            run_info = ['Run_Name', 'Run_num'] + params
+            score_info = ['Max_Score', 'Avg_Score', 'Last_' + str(num_eps) + '_Score']
+            win_info = ['Avg_Win_Val', 'Last_' + str(num_eps) + '_Win_Val', 'Win_%']
+            header_row = run_info + score_info + win_info
+            f.write(','.join(str(val) for val in header_row) + '\n')
 
     with sc2_env.SC2Env(
         map_name=config['env']['map_name'],
@@ -343,10 +344,18 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             avg = sum(all_ep_scores) / len(all_ep_scores)
             avg_win_last = sum(last_n_ep_wins) / len(last_n_ep_wins)
             avg_wins = sum(all_ep_wins) / len(all_ep_wins)
-            run_var_vals = ''
+            run_var_vals = []
             for _, val in run_variables.items():
-                run_var_vals += ' ' + '{:.2e}'.format(val)
-            f.write(config['model_dir'] + ' ' + str(run_num) + run_var_vals + ' ' + str(max_ep_score) + ' ' + str(avg) + ' ' + str(avg_last) + ' ' + str(avg_wins) + ' ' + str(avg_win_last) + ' ' + str(win_count / episode) + '\n')
+                run_var_vals.append('{:.2e}'.format(val))
+            columns = [config['model_dir'], run_num]
+            columns += run_var_vals
+            columns.append(max_ep_score)
+            columns.append(avg)
+            columns.append(avg_last)
+            columns.append(avg_wins)
+            columns.append(avg_win_last)
+            columns.append(win_count / episode)
+            f.write(','.join(str(val) for val in columns) + '\n')
 
 
 def main():
