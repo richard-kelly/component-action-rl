@@ -391,7 +391,7 @@ def main():
             if os.path.isfile(summary_file_name):
                 with open(summary_file_name, 'r') as summary:
                     for line in summary:
-                        words = line.split()
+                        words = line.split(',')
                         if len(words) > 1 and words[0] != 'Run_Name':
                             count = int(words[1])
 
