@@ -60,19 +60,23 @@ class DQNAgent:
             try:
                 checkpoint = tf.train.get_checkpoint_state(self._config['model_dir'])
                 self._network.saver.restore(self._sess, checkpoint.model_checkpoint_path)
-                self._steps = int(checkpoint.model_checkpoint_path.split('-')[-1])
-                # this makes sure tensorboard deletes any "future" events logged after the checkpoint
-                self._writer.add_session_log(tf.SessionLog(status=tf.SessionLog.START), global_step=self._steps)
+                if config['copy_model_from'] == "":
+                    self._steps = int(checkpoint.model_checkpoint_path.split('-')[-1])
+                    # this makes sure tensorboard deletes any "future" events logged after the checkpoint
+                    self._writer.add_session_log(tf.SessionLog(status=tf.SessionLog.START), global_step=self._steps)
 
-                # adjust epsilon for current step
-                self._update_epsilon(min(self._config['decay_steps'], self._steps))
-                print("Model restored at step: ", self._steps, ", epsilon: ", self._epsilon)
+                    # adjust epsilon for current step
+                    self._update_epsilon(min(self._config['decay_steps'], self._steps))
+                    print("Model restored at step: ", self._steps, ", epsilon: ", self._epsilon)
+                else:
+                    print("Model copied from:", config['copy_model_from'])
 
             except (ValueError, AttributeError):
                 # if the directory exists but there's no checkpoints, just continue
                 # usually because a test crashed immediately last time
                 self._sess.run(self._network.var_init)
                 self._network.update_target_q_net(self._sess)
+                print('Model restore failed')
         else:
             self._sess.run(self._network.var_init)
             self._network.update_target_q_net(self._sess)

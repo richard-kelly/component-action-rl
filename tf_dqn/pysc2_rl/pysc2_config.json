@@ -2,6 +2,7 @@
     "use_batch": true,
     "batch_file": "batch.json",
     "batch_runs": 20,
+    "copy_model_from": "",
     "inference_only": false,
     "inference_only_epsilon": 0,
     "realtime": false,
