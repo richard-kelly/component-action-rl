@@ -264,6 +264,9 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
     last_n_ep_wins = []
     win_count = 0
 
+    # action use stats
+    actions_used = {}
+
     if output_file is not None and not os.path.isfile(output_file):
         with open(output_file, 'a+') as f:
             params = []
@@ -322,7 +325,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                         if win == 1:
                             win_count += 1
 
-                    print("Episode", episode, "finished. Win:", win, "Score:", episode_reward)
+                    print("Episode", episode, "finished. Steps: ", step, "Win:", win, "Score:", episode_reward)
                     if len(last_n_ep_score) == num_eps:
                         last_n_ep_score.pop(0)
                         last_n_ep_wins.pop(0)
@@ -342,6 +345,18 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
 
                 action = rl_agent.act(state, available_actions)
                 action_for_sc = get_action_function(obs, action, config)
+
+                if config['save_action_stats']:
+                    action_name = actions.FUNCTIONS[action_for_sc.function].name
+                    if action_name not in actions_used:
+                        actions_used[action_name] = [0] * (episode - 1)
+                        actions_used[action_name].append(1)
+                    else:
+                        # this action may not have been used for some episode(s)
+                        actions_used[action_name] += [0] * (episode - len(actions_used[action_name]))
+                        # increment count for this episode
+                        actions_used[action_name][-1] += 1
+
                 # actions passed into env.step() are in a list with one action per player
                 obs = env.step([action_for_sc])[0]
 
@@ -363,6 +378,25 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             columns.append(avg_win_last)
             columns.append(win_count / episode)
             f.write(','.join(str(val) for val in columns) + '\n')
+
+    if config['save_action_stats']:
+        with open(config['model_dir'] + '/action_stats.csv', 'a+') as f:
+            headers = []
+            for key in actions_used:
+                headers.append(key)
+                # add 0s to end if needed
+                actions_used[key] += [0] * (episode - len(actions_used[key]))
+            f.write(','.join(val for val in headers) + '\n')
+            # get some key
+            sample_key = ""
+            for key in actions_used:
+                sample_key = key
+                break
+            for i in range(len(actions_used[sample_key])):
+                episode_actions = []
+                for key in actions_used:
+                    episode_actions.append(actions_used[key][i])
+                f.write(','.join(str(val) for val in episode_actions) + '\n')
 
 
 def main():

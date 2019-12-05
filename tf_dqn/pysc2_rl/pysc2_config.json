@@ -7,6 +7,7 @@
     "inference_only_epsilon": 0,
     "realtime": false,
     "log_action_descriptions": false,
+    "save_action_stats": true,
 
     "model_dir": "models/5m_nov_22",
     "model_checkpoint_frequency": 100000,
