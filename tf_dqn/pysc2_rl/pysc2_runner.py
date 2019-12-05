@@ -251,13 +251,11 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         with open(config['model_dir'] + '/config.json', 'w+') as fp:
             fp.write(json.dumps(config, indent=4))
 
-        # if continuing from another model (say for transfer learning)
-        if config['copy_model_from'] != "":
-            restore = True
-            for file in os.listdir(config['copy_model_from']):
-                if file == 'checkpoint' or file.split('.')[0] == 'model':
-                    shutil.copy2(os.path.join(config['copy_model_from'], file), os.path.join(config['model_dir'], file))
+    # if continuing from another model (say for transfer learning), we are restoring
+    if config['copy_model_from'] != "":
+        restore = True
 
+    # variables for episode stats
     num_eps = 20
     max_ep_score = None
     all_ep_scores = []

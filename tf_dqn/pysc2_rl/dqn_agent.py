@@ -58,7 +58,10 @@ class DQNAgent:
 
         if restore:
             try:
-                checkpoint = tf.train.get_checkpoint_state(self._config['model_dir'])
+                if config['copy_model_from'] == "":
+                    checkpoint = tf.train.get_checkpoint_state(self._config['model_dir'])
+                else:
+                    checkpoint = tf.train.get_checkpoint_state(config['copy_model_from'])
                 self._network.saver.restore(self._sess, checkpoint.model_checkpoint_path)
                 if config['copy_model_from'] == "":
                     self._steps = int(checkpoint.model_checkpoint_path.split('-')[-1])
@@ -87,6 +90,7 @@ class DQNAgent:
             self._average_episode_score = (self._average_episode_score * self._episodes + self._episode_score) / (self._episodes + 1)
             self._average_episode_win = (self._average_episode_win * self._episodes + win) / (self._episodes + 1)
             epsilon = self._epsilon if self._memory_start_size_reached else 1.0
+            epsilon = epsilon if not self._config['inference_only'] else self._config['inference_only_epsilon']
             summary = self._network.episode_summary(
                 self._sess,
                 self._episode_score,
