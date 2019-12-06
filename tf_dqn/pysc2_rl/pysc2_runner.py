@@ -115,10 +115,12 @@ def compute_action_list(rules):
     for rule in rules:
         if rule['type'] == 'exclude_range':
             for i in range(rule['list'][0], rule['list'][1] + 1):
-                allowed_actions.remove(i)
+                if i in allowed_actions:
+                    allowed_actions.remove(i)
         elif rule['type'] == 'exclude_list':
             for i in rule['list']:
-                allowed_actions.remove(i)
+                if i in allowed_actions:
+                    allowed_actions.remove(i)
     computed = list(allowed_actions)
     computed.sort()
     return computed
