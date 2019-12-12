@@ -188,6 +188,8 @@ def process_config_env(config):
         all_components['queued'] = False
     if not config['env']['use_screen2']:
         all_components['screen2'] = False
+    if not config['env']['use_select_add']:
+        all_components['select_add'] = False
 
     # if we have pre selected control groups, agent should only be able to select/recall a control group (which is 0)
     if num_groups > 0:
