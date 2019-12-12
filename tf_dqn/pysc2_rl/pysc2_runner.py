@@ -5,7 +5,7 @@ import sys
 import datetime
 import random
 import re
-import shutil
+import copy
 import tensorflow as tf
 
 from absl import flags
@@ -415,9 +415,22 @@ def main():
             # if it's a file, we just want that file
             config_paths = [sys.argv[1]]
 
+    # use one config as a 'base' to allow other configs to be smaller
+    with open('pysc2_config.json', 'r') as fp:
+        base_config = json.load(fp=fp)
+
     for config_file in config_paths:
         with open(config_file, 'r') as fp:
-            config = json.load(fp=fp)
+            new_config = json.load(fp=fp)
+
+        config = copy.deepcopy(base_config)
+        for prop in new_config:
+            if prop == 'env':
+                # instead of making this a recursive function, this should be fine for now
+                for env_prop in new_config['env']:
+                    config['env'][env_prop] = new_config['env'][env_prop]
+            else:
+                config[prop] = new_config[prop]
 
         config = process_config_env(config)
 
