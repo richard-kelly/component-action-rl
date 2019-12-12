@@ -5,6 +5,7 @@
     "copy_model_from": "",
     "inference_only": false,
     "inference_only_epsilon": 0,
+    "output_tensorboard_summaries": true,
     "realtime": false,
     "log_action_descriptions": false,
     "save_action_stats": true,

@@ -66,7 +66,8 @@ class DQNAgent:
                 if config['copy_model_from'] == "":
                     self._steps = int(checkpoint.model_checkpoint_path.split('-')[-1])
                     # this makes sure tensorboard deletes any "future" events logged after the checkpoint
-                    self._writer.add_session_log(tf.SessionLog(status=tf.SessionLog.START), global_step=self._steps)
+                    if self._config['output_tensorboard_summaries']:
+                        self._writer.add_session_log(tf.SessionLog(status=tf.SessionLog.START), global_step=self._steps)
 
                     # adjust epsilon for current step
                     self._update_epsilon(min(self._config['decay_steps'], self._steps))
@@ -99,7 +100,8 @@ class DQNAgent:
                 self._average_episode_win,
                 epsilon
             )
-            self._writer.add_summary(summary, self._steps)
+            if self._config['output_tensorboard_summaries']:
+                self._writer.add_summary(summary, self._steps)
             self._episode_score = 0
 
         # don't store things in memory if only doing inference
@@ -172,14 +174,19 @@ class DQNAgent:
             for name, q_values in self._sample_action.items():
                 if name == 'function':
                     valid = np.in1d(self._config['env']['computed_action_list'], available_actions)
-                    options = np.nonzero(valid)[0]
-                    action[name] = np.random.choice(options)
+                    try:
+                        options = np.nonzero(valid)[0]
+                        action[name] = np.random.choice(options)
+                    except Exception:
+                        print("WARNING: There were no valid actions. SOMETHING WENT WRONG.")
+                        action[name] = available_actions[0]
                 else:
                     action[name] = random.randint(0, q_values.shape[1] - 1)
         else:
             # get action by inference from network
             summary, pred = self._network.predict_one(self._sess, state)
-            self._writer.add_summary(summary, self._steps)
+            if self._config['output_tensorboard_summaries']:
+                self._writer.add_summary(summary, self._steps)
             for name, q_values in pred.items():
                 if name == 'function':
                     q_values = q_values.flatten()
@@ -204,7 +211,8 @@ class DQNAgent:
         last_time = time.time()
 
         summary, priorities = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states, is_terminal, weights)
-        self._writer.add_summary(summary, self._steps)
+        if self._config['output_tensorboard_summaries']:
+            self._writer.add_summary(summary, self._steps)
 
         if self._config['use_priority_experience_replay']:
             self._memory.update_priorities_of_last_sample(priorities)
