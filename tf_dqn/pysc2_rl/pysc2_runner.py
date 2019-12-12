@@ -329,7 +329,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                         if win == 1:
                             win_count += 1
 
-                    print("Episode", episode, "finished. Steps: ", step, "Win:", win, "Score:", episode_reward)
+                    print("Episode", episode, "finished. Steps:", step, "Win:", win, "Score:", episode_reward)
                     if len(last_n_ep_score) == num_eps:
                         last_n_ep_score.pop(0)
                         last_n_ep_wins.pop(0)
