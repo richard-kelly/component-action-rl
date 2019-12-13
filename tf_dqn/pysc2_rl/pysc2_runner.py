@@ -77,7 +77,7 @@ def get_action_function(obs, action, config):
             else:
                 args.append([action[name]])
 
-    if config['log_action_descriptions']:
+    if config['inference_only']:
         print(pysc2_funcs[func_id].name, ':', args)
     return actions.FunctionCall(func_id, args)
 
@@ -291,7 +291,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         ),
         visualize=config['env']['visualize'],
         step_mul=config['env']['step_mul'],
-        realtime=config['realtime']
+        realtime=config['inference_only']
     ) as env:
         tf.reset_default_graph()
         tf_config = tf.ConfigProto()
@@ -349,8 +349,9 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
 
                 action = rl_agent.act(state, available_actions)
                 action_for_sc = get_action_function(obs, action, config)
+                # action_for_sc = target_marine(obs, config)
 
-                if config['save_action_stats']:
+                if not config['inference_only']:
                     action_name = actions.FUNCTIONS[action_for_sc.function].name
                     if action_name not in actions_used:
                         actions_used[action_name] = [0] * (episode - 1)
@@ -383,7 +384,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             columns.append(win_count / episode)
             f.write(','.join(str(val) for val in columns) + '\n')
 
-    if config['save_action_stats']:
+    if not config['inference_only']:
         with open(config['model_dir'] + '/action_stats.csv', 'a+') as f:
             headers = []
             for key in actions_used:

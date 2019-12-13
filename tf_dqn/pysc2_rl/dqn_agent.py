@@ -66,7 +66,7 @@ class DQNAgent:
                 if config['copy_model_from'] == "":
                     self._steps = int(checkpoint.model_checkpoint_path.split('-')[-1])
                     # this makes sure tensorboard deletes any "future" events logged after the checkpoint
-                    if self._config['output_tensorboard_summaries']:
+                    if not self._config['inference_only']:
                         self._writer.add_session_log(tf.SessionLog(status=tf.SessionLog.START), global_step=self._steps)
 
                     # adjust epsilon for current step
@@ -100,7 +100,7 @@ class DQNAgent:
                 self._average_episode_win,
                 epsilon
             )
-            if self._config['output_tensorboard_summaries']:
+            if not self._config['inference_only']:
                 self._writer.add_summary(summary, self._steps)
             self._episode_score = 0
 
@@ -185,7 +185,7 @@ class DQNAgent:
         else:
             # get action by inference from network
             summary, pred = self._network.predict_one(self._sess, state)
-            if self._config['output_tensorboard_summaries']:
+            if not self._config['inference_only']:
                 self._writer.add_summary(summary, self._steps)
             for name, q_values in pred.items():
                 if name == 'function':
@@ -211,7 +211,7 @@ class DQNAgent:
         last_time = time.time()
 
         summary, priorities = self._network.train_batch(self._sess, self._steps, states, actions, rewards, next_states, is_terminal, weights)
-        if self._config['output_tensorboard_summaries']:
+        if not self._config['inference_only']:
             self._writer.add_summary(summary, self._steps)
 
         if self._config['use_priority_experience_replay']:
