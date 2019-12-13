@@ -428,10 +428,10 @@ def main():
 
         config = copy.deepcopy(base_config)
         for prop in new_config:
-            if prop == 'env':
+            if type(prop) is dict:
                 # instead of making this a recursive function, this should be fine for now
-                for env_prop in new_config['env']:
-                    config['env'][env_prop] = new_config['env'][env_prop]
+                for sub_prop in new_config[prop]:
+                    config[prop][sub_prop] = new_config[prop][sub_prop]
             else:
                 config[prop] = new_config[prop]
 

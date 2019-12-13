@@ -114,36 +114,18 @@ class SC2Network:
 
         screen = tf.concat(to_concat, axis=-1, name='screen_input')
 
-        # begin shared conv layers
-        conv1_spatial = tf.layers.conv2d(
-            inputs=screen,
-            filters=16,
-            kernel_size=5,
-            padding='same',
-            name='conv1_spatial',
-            activation=tf.nn.leaky_relu
-        )
-        conv1_spatial = tf.layers.batch_normalization(conv1_spatial, training=self._training)
-
-        conv2_spatial = tf.layers.conv2d(
-            inputs=conv1_spatial,
-            filters=32,
-            kernel_size=3,
-            padding='same',
-            name='conv2_spatial',
-            activation=tf.nn.leaky_relu
-        )
-        conv2_spatial = tf.layers.batch_normalization(conv2_spatial, training=self._training)
+        with tf.variable_scope('spatial_network'):
+            conv_spatial_num_filters, conv_spatial = self._get_conv_layers(screen, self._config['network_structure']['spatial_network'])
 
         with tf.variable_scope('spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
             # TODO: come up with better scaling based on which action components are used in training.
             scale = 1 / math.sqrt(2)
-            conv2_spatial = (1 - scale) * tf.stop_gradient(conv2_spatial) + scale * conv2_spatial
+            conv_spatial = (1 - scale) * tf.stop_gradient(conv_spatial) + scale * conv_spatial
 
         # spatial policy splits off before max pooling
         max_pool = tf.layers.max_pooling2d(
-            inputs=conv2_spatial,
+            inputs=conv_spatial,
             pool_size=3,
             strides=3,
             padding='valid',
@@ -153,7 +135,7 @@ class SC2Network:
         # MUST flatten conv or pooling layers before sending to dense layer
         non_spatial_flat = tf.reshape(
             max_pool,
-            shape=[-1, int(self._config['env']['screen_size'] * self._config['env']['screen_size'] / 9 * 32)],
+            shape=[-1, int(self._config['env']['screen_size'] * self._config['env']['screen_size'] / 9 * conv_spatial_num_filters)],
             name='conv2_spatial_flat'
         )
 
@@ -165,57 +147,28 @@ class SC2Network:
 
         # for dueling net, split here
         if self._config['dueling_network']:
-            fc_value1 = tf.layers.dense(
-                non_spatial_flat,
-                1024,
-                activation=tf.nn.leaky_relu,
-                kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-                name='fc_value_1'
-            )
-            fc_value1 = tf.layers.batch_normalization(fc_value1, training=self._training)
-            fc_value2 = tf.layers.dense(
-                fc_value1,
-                1024,
-                activation=tf.nn.leaky_relu,
-                kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-                name='fc_value_2'
-            )
-            fc_value2 = tf.layers.batch_normalization(fc_value2, training=self._training)
-            value = tf.layers.dense(
-                fc_value2,
-                1,
-                activation=None,
-                kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-                name='value'
-            )
-            value = tf.layers.batch_normalization(value, training=self._training)
+            with tf.variable_scope('value_network'):
+                fc_value = self._get_dense_layers(non_spatial_flat, self._config['network_structure']['value_network'])
+                value = tf.layers.dense(
+                    fc_value,
+                    1,
+                    activation=None,
+                    kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
+                    name='value'
+                )
+                value = tf.layers.batch_normalization(value, training=self._training)
 
-        fc_non_spatial_1 = tf.layers.dense(
-            non_spatial_flat,
-            1024,
-            activation=tf.nn.leaky_relu,
-            kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-            name='fc_non_spatial_1'
-        )
-        fc_non_spatial_1 = tf.layers.batch_normalization(fc_non_spatial_1, training=self._training)
-
-        fc_non_spatial_2 = tf.layers.dense(
-            fc_non_spatial_1,
-            1024,
-            activation=tf.nn.leaky_relu,
-            kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
-            name='fc_non_spatial_2'
-        )
-        fc_non_spatial_2 = tf.layers.batch_normalization(fc_non_spatial_2, training=self._training)
+        with tf.variable_scope('non_spatial_network'):
+            fc_non_spatial = self._get_dense_layers(non_spatial_flat, self._config['network_structure']['non_spatial_network'])
 
         with tf.variable_scope('non_spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
             # TODO: come up with better scaling based on which action components are used in training.
             scale = 1 / math.sqrt(2)
-            fc_non_spatial_2 = (1 - scale) * tf.stop_gradient(fc_non_spatial_2) + scale * fc_non_spatial_2
+            fc_non_spatial = (1 - scale) * tf.stop_gradient(fc_non_spatial) + scale * fc_non_spatial
 
         spatial_policy_1 = tf.layers.conv2d(
-            inputs=conv2_spatial,
+            inputs=conv_spatial,
             filters=1,
             kernel_size=1,
             padding='same',
@@ -224,7 +177,7 @@ class SC2Network:
 
         if self._action_components['screen2']:
             spatial_policy_2 = tf.layers.conv2d(
-                inputs=conv2_spatial,
+                inputs=conv_spatial,
                 filters=1,
                 kernel_size=1,
                 padding='same',
@@ -236,20 +189,20 @@ class SC2Network:
         comp = self._action_components
         num_options = self._get_num_options_per_function()
         action_q_vals = dict(
-            function=tf.layers.dense(fc_non_spatial_2, num_options['function'], name='function'),
+            function=tf.layers.dense(fc_non_spatial, num_options['function'], name='function'),
             screen=tf.reshape(spatial_policy_1, [-1, num_options['screen']], name='screen') if comp['screen'] else None,
             minimap=tf.reshape(spatial_policy_1, [-1, num_options['minimap']], name='minimap') if comp['minimap'] else None,
             screen2=tf.reshape(spatial_policy_2, [-1, num_options['screen2']], name='screen2') if comp['screen2'] else None,
-            queued=tf.layers.dense(fc_non_spatial_2, num_options['queued'], name='queued') if comp['queued'] else None,
-            control_group_act=tf.layers.dense(fc_non_spatial_2, num_options['control_group_act'], name='control_group_act') if comp['control_group_act'] else None,
-            control_group_id=tf.layers.dense(fc_non_spatial_2, num_options['control_group_id'], name='control_group_id') if comp['control_group_id'] else None,
-            select_point_act=tf.layers.dense(fc_non_spatial_2, num_options['select_point_act'], name='select_point_act') if comp['select_point_act'] else None,
-            select_add=tf.layers.dense(fc_non_spatial_2, num_options['select_add'], name='select_add') if comp['select_add'] else None,
-            select_unit_act=tf.layers.dense(fc_non_spatial_2, num_options['select_unit_act'], name='select_unit_act') if comp['select_unit_act'] else None,
-            select_unit_id=tf.layers.dense(fc_non_spatial_2, num_options['select_unit_id'], name='select_unit_id') if comp['select_unit_id'] else None,
-            select_worker=tf.layers.dense(fc_non_spatial_2, num_options['select_worker'], name='select_worker') if comp['select_worker'] else None,
-            build_queue_id=tf.layers.dense(fc_non_spatial_2, num_options['build_queue_id'], name='build_queue_id') if comp['build_queue_id'] else None,
-            unload_id=tf.layers.dense(fc_non_spatial_2, num_options['unload_id'], name='unload_id') if comp['unload_id'] else None,
+            queued=tf.layers.dense(fc_non_spatial, num_options['queued'], name='queued') if comp['queued'] else None,
+            control_group_act=tf.layers.dense(fc_non_spatial, num_options['control_group_act'], name='control_group_act') if comp['control_group_act'] else None,
+            control_group_id=tf.layers.dense(fc_non_spatial, num_options['control_group_id'], name='control_group_id') if comp['control_group_id'] else None,
+            select_point_act=tf.layers.dense(fc_non_spatial, num_options['select_point_act'], name='select_point_act') if comp['select_point_act'] else None,
+            select_add=tf.layers.dense(fc_non_spatial, num_options['select_add'], name='select_add') if comp['select_add'] else None,
+            select_unit_act=tf.layers.dense(fc_non_spatial, num_options['select_unit_act'], name='select_unit_act') if comp['select_unit_act'] else None,
+            select_unit_id=tf.layers.dense(fc_non_spatial, num_options['select_unit_id'], name='select_unit_id') if comp['select_unit_id'] else None,
+            select_worker=tf.layers.dense(fc_non_spatial, num_options['select_worker'], name='select_worker') if comp['select_worker'] else None,
+            build_queue_id=tf.layers.dense(fc_non_spatial, num_options['build_queue_id'], name='build_queue_id') if comp['build_queue_id'] else None,
+            unload_id=tf.layers.dense(fc_non_spatial, num_options['unload_id'], name='unload_id') if comp['unload_id'] else None,
         )
 
         num_active_args = 0
@@ -261,7 +214,7 @@ class SC2Network:
 
         # function_selected =
         # q-q_val_weights =
-        q_val_weights = tf.layers.dense(fc_non_spatial_2, num_active_args)
+        q_val_weights = tf.layers.dense(fc_non_spatial, num_active_args)
         q_val_weights = tf.nn.softmax(q_val_weights, name='q_val_weights')
 
         action_q_vals_filtered = {}
@@ -386,6 +339,44 @@ class SC2Network:
                 action_one_hot[name] = tf.one_hot(actions[name], num_options[name], 1.0, 0.0, name=name)
 
         return action_one_hot
+
+
+    def _get_conv_layers(self, inputs, spec):
+        # expecting spec to be a list of lists of dicts.
+        # each inner list is a list of conv layers using the same input to be concatenated
+        # each dict gives the number of filters and kernel size of a conv layer
+        num_output_layers = 0
+        for conv_unit in spec:
+            num_output_layers = 0
+            conv_layers = []
+            for conv in conv_unit:
+                conv_layer = tf.layers.conv2d(
+                    inputs=inputs,
+                    filters=conv['filters'],
+                    kernel_size=conv['kernel_size'],
+                    padding='same',
+                    activation=tf.nn.leaky_relu
+                )
+                conv_layer = tf.layers.batch_normalization(conv_layer, training=self._training)
+                conv_layers.append(conv_layer)
+                num_output_layers += conv['filters']
+            inputs = tf.concat(conv_layers, axis=-1)
+        return num_output_layers, inputs
+
+
+    def _get_dense_layers(self, inputs, spec):
+        # expecting spec to be a list of ints
+        for num_units in spec:
+            dense = tf.layers.dense(
+                inputs,
+                units=num_units,
+                activation=tf.nn.leaky_relu,
+                kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
+            )
+            dense = tf.layers.batch_normalization(dense, training=self._training)
+            inputs = dense
+        return inputs
+
 
     def _define_model(self):
         # placeholders for (s, a, s', r, terminal)

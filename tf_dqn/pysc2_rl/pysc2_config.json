@@ -45,6 +45,25 @@
     "debug_logging": false,
     "log_frequency": 200,
 
+    "network_structure": {
+        "spatial_network": [
+            [
+                {
+                    "filters": 16,
+                    "kernel_size": 5
+                }
+            ],
+            [
+                {
+                    "filters": 32,
+                    "kernel_size": 3
+                }
+            ]
+        ],
+        "value_network": [1024, 1024],
+        "non_spatial_network": [1024, 1024]
+    },
+
     "env": {
         "screen_size": 84,
         "minimap_size": 84,
