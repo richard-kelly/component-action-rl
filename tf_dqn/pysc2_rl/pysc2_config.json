@@ -72,23 +72,9 @@
         "step_mul": 8,
         "action_functions": [
             {
-                "type": "include_range",
-                "list": [0, 548]
-            },
-            {
-                "reason": "exclude 500 long queue ids and select ids",
-                "type": "exclude_list",
-                "list": [5, 10]
-            },
-            {
-                "reason": "exclude control groups because they are not very useful without an RNN",
-                "type": "exclude_list",
-                "list": [4]
-            },
-            {
-                "reason": "exclude minimap actions",
-                "type": "exclude_list",
-                "list": [1, 13, 15, 17, 20, 547, 543, 544, 545, 542, 332, 334, 336, 338, 340, 342, 344, 346, 348, 350, 452, 517, 519, 521, 523]
+                "reason": "no_op, select_rect, select_army, attack_screen, move_screen",
+                "type": "include_list",
+                "list": [0, 3, 7, 12, 331]
             }
         ],
         "use_screen2": true,
