@@ -427,13 +427,19 @@ def main():
             new_config = json.load(fp=fp)
 
         config = copy.deepcopy(base_config)
+        found_model_name = False
         for prop in new_config:
+            if prop == 'model_dir':
+                found_model_name = True
             if type(prop) is dict:
                 # instead of making this a recursive function, this should be fine for now
                 for sub_prop in new_config[prop]:
                     config[prop][sub_prop] = new_config[prop][sub_prop]
             else:
                 config[prop] = new_config[prop]
+
+        if not found_model_name:
+            config['model_dir'] = config['model_dir'] + '/' + config_file
 
         config = process_config_env(config)
 
