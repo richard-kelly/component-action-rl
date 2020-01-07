@@ -227,15 +227,18 @@ def preprocess_state(obs, config):
     state = dict(
         screen_player_relative=obs.observation['feature_screen'].player_relative,
         screen_selected=obs.observation['feature_screen'].selected,
-        screen_unit_hit_points=obs.observation['feature_screen'].unit_hit_points,
-        screen_unit_hit_points_ratio=obs.observation['feature_screen'].unit_hit_points_ratio,
-        screen_unit_shields=obs.observation['feature_screen'].unit_shields,
-        screen_unit_shields_ratio=obs.observation['feature_screen'].unit_shields_ratio,
         available_actions=avail_actions
     )
 
     if unit_types is not None:
         state['screen_unit_type'] = unit_types
+
+    if config['env']['use_hp_shield_log_values'] or config['env']['use_hp_shield_cats']:
+        state['screen_unit_hit_points'] = obs.observation['feature_screen'].unit_hit_points
+        state['screen_unit_shields'] = obs.observation['feature_screen'].unit_shields
+    if config['env']['use_hp_shield_ratios']:
+        state['screen_unit_hit_points_ratio'] = obs.observation['feature_screen'].unit_hit_points_ratio
+        state['screen_unit_shields_ratio'] = obs.observation['feature_screen'].unit_shields_ratio
 
     return state
 

@@ -83,6 +83,9 @@
         "select_rect_half_size": 20,
         "use_all_unit_types": false,
         "use_specific_unit_types": false,
-        "specific_unit_types": ["Marine", "Stalker"]
+        "specific_unit_types": ["Marine", "Stalker"],
+        "use_hp_shield_log_values": false,
+        "use_hp_shield_ratios": false,
+        "use_hp_shield_cats": true
     }
 }
