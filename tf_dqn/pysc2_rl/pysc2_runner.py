@@ -349,7 +349,6 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
 
                 action = rl_agent.act(state, available_actions)
                 action_for_sc = get_action_function(obs, action, config)
-                # action_for_sc = target_marine(obs, config)
 
                 if not config['inference_only']:
                     action_name = actions.FUNCTIONS[action_for_sc.function].name
@@ -448,7 +447,11 @@ def main():
                 config[prop] = new_config[prop]
 
         if not found_model_name:
-            config['model_dir'] = config['model_dir'] + '/' + config_file
+            # want to append to model name just the name of the config file without .json and without path to its folder
+            config_name = ''
+            for part in os.path.basename(os.path.normpath(config_file)).split('.')[:-1]:
+                config_name += part
+            config['model_dir'] = config['model_dir'] + '/' + config_name
 
         config = process_config_env(config)
 
