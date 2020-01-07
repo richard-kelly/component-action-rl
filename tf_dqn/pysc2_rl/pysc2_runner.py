@@ -422,6 +422,15 @@ def main():
     with open('pysc2_config.json', 'r') as fp:
         base_config = json.load(fp=fp)
 
+    # bypass everything else if we are doing inference only
+    if base_config['inference_only']:
+        with open(base_config['model_dir'] + '/config.json', 'r') as fp:
+            config = json.load(fp=fp)
+        config['inference_only'] = True
+        config['inference_only_epsilon'] = base_config['inference_only_epsilon']
+        run_one_env(config, rename_if_duplicate=False)
+        exit(0)
+
     for config_file in config_paths:
         with open(config_file, 'r') as fp:
             new_config = json.load(fp=fp)
