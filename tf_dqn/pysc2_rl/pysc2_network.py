@@ -257,6 +257,8 @@ class SC2Network:
 
     def _get_state_placeholder(self):
         screen_shape = [None, self._config['env']['screen_size'], self._config['env']['screen_size']]
+
+        # things that always go in
         state_placeholder = dict(
             screen_player_relative=tf.placeholder(
                 shape=screen_shape,
@@ -275,30 +277,34 @@ class SC2Network:
             )
         )
 
-        if self._config['env']['use_hp_shield_log_values'] or self._config['env']['use_hp_shield_cats']:
+        # hp and shield categories that are optional
+        if self._config['env']['use_hp_log_values'] or self._config['env']['use_hp_cats']:
             state_placeholder['screen_unit_hit_points'] = tf.placeholder(
                 shape=screen_shape,
                 dtype=tf.int32,
                 name='screen_unit_hit_points'
             )
+        if self._config['env']['use_shield_log_values'] or self._config['env']['use_shield_cats']:
             state_placeholder['screen_unit_shields'] = tf.placeholder(
                 shape=screen_shape,
                 dtype=tf.int32,
                 name='screen_unit_shields'
             )
 
-        if self._config['env']['use_hp_shield_ratios']:
+        if self._config['env']['use_hp_ratios']:
             state_placeholder['screen_unit_hit_points_ratio'] = tf.placeholder(
                 shape=screen_shape,
                 dtype=tf.int32,
                 name='screen_unit_hit_points_ratio'
             )
+        if self._config['env']['use_shield_ratios']:
             state_placeholder['screen_unit_shields_ratio'] = tf.placeholder(
                 shape=screen_shape,
                 dtype=tf.int32,
                 name='screen_unit_shields_ratio'
             )
 
+        # unit types are optional
         if self._config['env']['use_all_unit_types'] or self._config['env']['use_specific_unit_types']:
             state_placeholder['screen_unit_type'] =tf.placeholder(
                 shape=screen_shape,
