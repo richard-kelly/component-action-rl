@@ -84,8 +84,14 @@
         "use_all_unit_types": false,
         "use_specific_unit_types": false,
         "specific_unit_types": ["Marine", "Stalker"],
-        "use_hp_shield_log_values": false,
-        "use_hp_shield_ratios": false,
-        "use_hp_shield_cats": true
+
+        "use_hp_log_values": false,
+        "use_shield_log_values": false,
+        "use_hp_ratios": false,
+        "use_shield_ratios": false,
+        "use_hp_cats": true,
+        "hp_cats_values": [15, 30, 50, 100],
+        "use_shield_cats": true,
+        "shield_cats_values": [15, 30, 50, 100]
     }
 }

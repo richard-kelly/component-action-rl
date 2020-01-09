@@ -233,11 +233,13 @@ def preprocess_state(obs, config):
     if unit_types is not None:
         state['screen_unit_type'] = unit_types
 
-    if config['env']['use_hp_shield_log_values'] or config['env']['use_hp_shield_cats']:
+    if config['env']['use_hp_log_values'] or config['env']['use_hp_cats']:
         state['screen_unit_hit_points'] = obs.observation['feature_screen'].unit_hit_points
+    if config['env']['use_shield_log_values'] or config['env']['use_shield_cats']:
         state['screen_unit_shields'] = obs.observation['feature_screen'].unit_shields
-    if config['env']['use_hp_shield_ratios']:
+    if config['env']['use_hp_ratios']:
         state['screen_unit_hit_points_ratio'] = obs.observation['feature_screen'].unit_hit_points_ratio
+    if config['env']['use_shield_ratios']:
         state['screen_unit_shields_ratio'] = obs.observation['feature_screen'].unit_shields_ratio
 
     return state

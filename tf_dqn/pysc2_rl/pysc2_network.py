@@ -54,11 +54,7 @@ class SC2Network:
             num_classes=5
         )
         # we only want self and enemy:
-        # NONE = 0
-        # SELF = 1
-        # ALLY = 2
-        # NEUTRAL = 3
-        # ENEMY = 4
+        # NONE = 0, SELF = 1, ALLY = 2, NEUTRAL = 3, ENEMY = 4
         screen_player_relative_self = screen_player_relative_one_hot[:, :, :, 1]
         screen_player_relative_self = tf.expand_dims(screen_player_relative_self, axis=-1)
         to_concat.append(screen_player_relative_self)
@@ -72,45 +68,50 @@ class SC2Network:
         screen_selected_one_hot = tf.expand_dims(screen_selected_one_hot, axis=-1)
         to_concat.append(screen_selected_one_hot)
 
-        if self._config['env']['use_hp_shield_log_values']:
+        if self._config['env']['use_hp_log_values']:
             # scale hit points (0-?) logarithmically (add 1 to avoid undefined) since they can be so high
             screen_unit_hit_points = tf.math.log1p(tf.cast(inputs['screen_unit_hit_points'], dtype=tf.float32))
             # add a dimension (depth)
             screen_unit_hit_points = tf.expand_dims(screen_unit_hit_points, axis=-1)
             to_concat.append(screen_unit_hit_points)
-
+        if self._config['env']['use_shield_log_values']:
             screen_unit_shields = tf.math.log1p(tf.cast(inputs['screen_unit_shields'], dtype=tf.float32))
             screen_unit_shields = tf.expand_dims(screen_unit_shields, axis=-1)
             to_concat.append(screen_unit_shields)
 
-        if self._config['env']['use_hp_shield_ratios']:
+        if self._config['env']['use_hp_ratios']:
             # ratio goes up to 255 max
             screen_unit_hit_points_ratio = tf.cast(inputs['screen_unit_hit_points_ratio'] / 255, dtype=tf.float32)
             screen_unit_hit_points_ratio = tf.expand_dims(screen_unit_hit_points_ratio, axis=-1)
             to_concat.append(screen_unit_hit_points_ratio)
-
+        if self._config['env']['use_shield_ratios']:
             screen_unit_shields_ratio = tf.cast(inputs['screen_unit_shields_ratio'] / 255, dtype=tf.float32)
             screen_unit_shields_ratio = tf.expand_dims(screen_unit_shields_ratio, axis=-1)
             to_concat.append(screen_unit_shields_ratio)
 
-        if self._config['env']['use_hp_shield_cats']:
-            # hit point and shield categories
+        if self._config['env']['use_hp_cats']:
             ones = tf.ones(tf.shape(inputs['screen_unit_hit_points']))
             zeros = tf.zeros(tf.shape(inputs['screen_unit_hit_points']))
             hp = inputs['screen_unit_hit_points']
-
             # add a dimension (depth) to each
-            to_concat.append(tf.expand_dims(tf.where(hp < 15, ones, zeros), axis=-1))
-            to_concat.append(tf.expand_dims(tf.where(tf.logical_and(hp >= 15, hp < 30), ones, zeros), axis=-1))
-            to_concat.append(tf.expand_dims(tf.where(tf.logical_and(hp >= 30, hp < 50), ones, zeros), axis=-1))
-            to_concat.append(tf.expand_dims(tf.where(tf.logical_and(hp >= 50, hp < 100), ones, zeros), axis=-1))
-            to_concat.append(tf.expand_dims(tf.where(tf.logical_and(hp >= 100, hp < 200), ones, zeros), axis=-1))
+            vals = self._config['env']['hp_cats_values']
+            to_concat.append(tf.expand_dims(tf.where(hp <= vals[0], ones, zeros), axis=-1))
+            for i in range(1, len(vals)):
+                to_concat.append(
+                    tf.expand_dims(tf.where(tf.logical_and(hp > vals[i-1], hp <= vals[i]), ones, zeros), axis=-1)
+                )
+            to_concat.append(tf.expand_dims(tf.where(hp > vals[-1], ones, zeros), axis=-1))
+        if self._config['env']['use_shield_cats']:
+            ones = tf.ones(tf.shape(inputs['screen_unit_hit_points']))
+            zeros = tf.zeros(tf.shape(inputs['screen_unit_hit_points']))
             sh = inputs['screen_unit_shields']
-            to_concat.append(tf.expand_dims(tf.where(sh < 15, ones, zeros), axis=-1))
-            to_concat.append(tf.expand_dims(tf.where(tf.logical_and(sh >= 15, sh < 30), ones, zeros), axis=-1))
-            to_concat.append(tf.expand_dims(tf.where(tf.logical_and(sh >= 30, sh < 50), ones, zeros), axis=-1))
-            to_concat.append(tf.expand_dims(tf.where(tf.logical_and(sh >= 50, sh < 100), ones, zeros), axis=-1))
-            to_concat.append(tf.expand_dims(tf.where(tf.logical_and(sh >= 100, sh < 200), ones, zeros), axis=-1))
+            vals = self._config['env']['hp_cats_values']
+            to_concat.append(tf.expand_dims(tf.where(sh <= vals[0], ones, zeros), axis=-1))
+            for i in range(1, len(vals)):
+                to_concat.append(
+                    tf.expand_dims(tf.where(tf.logical_and(sh > vals[i - 1], sh <= vals[i]), ones, zeros), axis=-1)
+                )
+            to_concat.append(tf.expand_dims(tf.where(sh > vals[-1], ones, zeros), axis=-1))
 
         if self._config['env']['use_all_unit_types']:
             # pysc2 has a list of known unit types, and the max unit id is around 2000 but there are 259 units (v3.0)
