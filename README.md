@@ -9,5 +9,4 @@ Experimenting with RL frameworks and pysc2
 
 ## To Implement
 
-* config settings for choosing how to do health and shields. (i.e. categories instead of log(health))
 * add more network settings 

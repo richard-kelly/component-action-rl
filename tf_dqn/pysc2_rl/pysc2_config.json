@@ -27,6 +27,13 @@
     "reg_scale": 1e-3,
     "use_component_weights": false,
 
+    "loss_formula": "avg_y_compared_to_components",
+    "loss_formula_choices": [
+        "avg_y_compared_to_components",
+        "avg_y_compared_to_avg_prediction",
+        "pairwise_component_comparison"
+    ],
+
     "update_frequency": 4,
     "memory_size": 60000,
     "memory_burn_in": 10000,
@@ -36,6 +43,7 @@
     "per_alpha": 0.6,
     "per_starting_beta": 0.4,
     "per_beta_anneal_steps": 250000,
+    "avg_component_tds": true,
 
     "initial_epsilon": 1.0,
     "final_epsilon": 0.1,

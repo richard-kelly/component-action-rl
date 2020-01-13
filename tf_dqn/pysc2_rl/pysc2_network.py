@@ -224,18 +224,7 @@ class SC2Network:
             unload_id=tf.layers.dense(fc_non_spatial, num_options['unload_id'], name='unload_id') if comp['unload_id'] else None,
         )
 
-        num_active_args = 0
-        self._arg_weight_association = dict()
-        for name, val in action_q_vals.items():
-            if val is not None:
-                self._arg_weight_association[name] = num_active_args
-                num_active_args += 1
-
-        # function_selected =
-        # q-q_val_weights =
-        q_val_weights = tf.layers.dense(fc_non_spatial, num_active_args)
-        q_val_weights = tf.nn.softmax(q_val_weights, name='q_val_weights')
-
+        # remove actions that are not used in this network (set to None above)
         action_q_vals_filtered = {}
         for name, val in action_q_vals.items():
             if val is not None:
@@ -248,12 +237,14 @@ class SC2Network:
                 for name, advantage in action_q_vals_filtered.items():
                     action_q_vals_filtered[name] = tf.add(value, (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True)), name=name)
 
+        # filter out actions ('function') that are illegal for this state
         with tf.variable_scope('available_actions_mask'):
             # available actions mask; avoids using negative infinity, and is the right size
             action_neg_inf_q_vals = action_q_vals_filtered['function'] * 0 - 1000000
             action_q_vals_filtered['function'] = tf.where(inputs['available_actions'], action_q_vals_filtered['function'], action_neg_inf_q_vals)
 
-        return action_q_vals_filtered, q_val_weights
+        # return action_q_vals_filtered, q_val_weights
+        return action_q_vals_filtered
 
     def _get_state_placeholder(self):
         screen_shape = [None, self._config['env']['screen_size'], self._config['env']['screen_size']]
@@ -369,7 +360,6 @@ class SC2Network:
 
         return action_one_hot
 
-
     def _get_conv_layers(self, inputs, spec):
         # expecting spec to be a list of lists of dicts.
         # each inner list is a list of conv layers using the same input to be concatenated
@@ -392,7 +382,6 @@ class SC2Network:
             inputs = tf.concat(conv_layers, axis=-1)
         return num_output_layers, inputs
 
-
     def _get_dense_layers(self, inputs, spec):
         # expecting spec to be a list of ints
         for num_units in spec:
@@ -405,7 +394,6 @@ class SC2Network:
             dense = tf.layers.batch_normalization(dense, training=self._training)
             inputs = dense
         return inputs
-
 
     def _define_model(self):
         # placeholders for (s, a, s', r, terminal)
@@ -425,9 +413,11 @@ class SC2Network:
 
         # primary and target Q nets
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
-            self._q, self._q_weights = self._get_network(self._states)
+            # self._q, self._q_weights = self._get_network(self._states)
+            self._q = self._get_network(self._states)
         with tf.variable_scope('Q_target'):
-            self._q_target, self._q_target_weights = self._get_network(self._next_states)
+            # self._q_target, self._q_target_weights = self._get_network(self._next_states)
+            self._q_target = self._get_network(self._next_states)
         # used for copying parameters from primary to target net
         self._q_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_primary")
         self._q_target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_target")
@@ -475,22 +465,14 @@ class SC2Network:
                     actions_next[name] = tf.argmax(q_vals, axis=1)
                 next_states_action_one_hot = self._get_action_one_hot(actions_next)
 
-        # modify q_val weights based on used arguments
-        # all_masks = []
-        # for name, i in self._arg_weight_association.items():
-        #     all_masks.append(argument_masks[name])
-        # all_masks = tf.stack(all_masks, axis=1)
-        # tf.reduce_max(next_states_action_one_hot['function'] * all_masks, axis=-1)
-            # # TODO: THIS IS WRONG!
-            # adjusted_weights = self._q_target_weights[self._arg_weight_association[name]] * argument_masks[name]
-            # self._q_target_weights[name] = tf.nn.softmax(adjusted_weights, name='q_val_weights_masked')
-
         # target Q(s,a)
         with tf.variable_scope('y'):
+            # holds q val of each action component in target net
             y_components = {}
             if self._config['double_DQN']:
                 # Double DQN uses target network Q val of primary network next action
                 for name, action in self._actions_next.items():
+                    # creates tensor with [0, 1, 2, ...] with length of ???
                     row = tf.range(tf.shape(action)[0])
                     combined = tf.stack([row, action], axis=1)
                     max_q_next = tf.gather_nd(self._q_target[name], combined)
@@ -500,6 +482,7 @@ class SC2Network:
                 for name, q_vals in self._q_target.items():
                     max_q_next_by_target = tf.reduce_max(q_vals, axis=-1, name=name)
                     y_components[name] = (1 - self._terminal) * (self._config['discount'] ** self._config['bootstrapping_steps']) * max_q_next_by_target
+            # q val of components not used for the action actually chosen in 'function' will be set to zero
             y_components_masked = []
             # get vector of 0s of correct length
             num_components = self._rewards * 0
@@ -507,60 +490,69 @@ class SC2Network:
                 argument_mask = tf.reduce_max(next_states_action_one_hot['function'] * argument_masks[name], axis=-1)
                 # keep track of number of components used in this action
                 num_components = num_components + argument_mask
-                if self._config['use_component_weights']:
-                    y_components[name] = y_components[name] * self._q_target_weights[:, self._arg_weight_association[name]]
                 y_components_masked.append(y_components[name] * argument_mask)
             y_parts_stacked = tf.stack(y_components_masked, axis=1)
-            if self._config['use_component_weights']:
-                y = tf.stop_gradient(self._rewards + tf.reduce_sum(y_parts_stacked, axis=1))
-            else:
-                y = tf.stop_gradient(self._rewards + (tf.reduce_sum(y_parts_stacked, axis=1) / num_components))
+            # single y value is: r + avg(q vals of components used)
+            # stop gradient here because we don't back prop on target net
+            y = tf.stop_gradient(self._rewards + (tf.reduce_sum(y_parts_stacked, axis=1) / num_components))
 
-        with tf.variable_scope('predict_q'):
-            prediction_components_masked = []
-            # get vector of 0s of correct length
-            num_components = self._rewards * 0
-            for name in training_action_q:
-                argument_mask = tf.reduce_max(next_states_action_one_hot['function'] * argument_masks[name], axis=-1)
-                # keep track of number of components used in this action
-                num_components = num_components + argument_mask
-                prediction_components_masked.append(training_action_q[name] * argument_mask)
-            prediction_parts_stacked = tf.stack(prediction_components_masked, axis=1)
-            precidtion_q = tf.reduce_sum(prediction_parts_stacked, axis=1) / num_components
-
-        # methods:
-            # 1) average of y compared to each component of prediction action
-            # 2) average of y compared to average of prediction
-            # 3) each component compared pairwise, only if used in prediction [not implemented... what to do with reward?]
-        loss_method = 1
+        if self._config['loss_formula'] == 'avg_y_compared_to_avg_prediction':
+            with tf.variable_scope('predict_q'):
+                prediction_components_masked = []
+                # get vector of 0s of correct length
+                num_components = self._rewards * 0
+                for name in training_action_q:
+                    argument_mask = tf.reduce_max(next_states_action_one_hot['function'] * argument_masks[name], axis=-1)
+                    # keep track of number of components used in this action
+                    num_components = num_components + argument_mask
+                    prediction_components_masked.append(training_action_q[name] * argument_mask)
+                prediction_parts_stacked = tf.stack(prediction_components_masked, axis=1)
+                prediction_q = tf.reduce_sum(prediction_parts_stacked, axis=1) / num_components
 
         # calculate losses (average of y compared to each component of prediction action)
         with tf.variable_scope('losses'):
-            if loss_method == 1:
-                losses = []
-                td = []
-                num_components = self._rewards * 0
+            losses = []
+            td = []
+            num_components = self._rewards * 0
+            if self._config['loss_formula'] == 'avg_y_compared_to_components':
                 for name in training_action_q:
                     # argument mask is scalar 1 if this argument is used for the transition action, 0 otherwise
                     argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
+                    num_components = num_components + argument_mask
                     training_action_q_masked = training_action_q[name] * argument_mask
                     y_masked = y * argument_mask
-                    if self._config['use_component_weights']:
-                        training_action_q_masked = training_action_q_masked * self._q_weights[:, self._arg_weight_association[name]]
                     # we compare the q value of each component to the target y; y is masked if training q is masked
                     loss = tf.losses.huber_loss(training_action_q_masked, y_masked, weights=self._per_weights)
                     td.append(tf.abs(training_action_q_masked - y_masked))
-                    num_components = num_components + argument_mask
                     losses.append(loss)
-                # TODO: Switched to sum instead of mean, so maybe the learning rate should come down
-                training_losses = tf.reduce_sum(tf.stack(losses), name='training_losses')
-                reg_loss = tf.losses.get_regularization_loss()
-                final_loss = training_losses + reg_loss
-                tf.summary.scalar('training_loss', training_losses)
-                tf.summary.scalar('regularization_loss', reg_loss)
-                # self._td_abs = tf.reduce_sum(tf.stack(td, axis=1), axis=1) / num_components
+            elif self._config['loss_formula'] == 'avg_y_compared_to_avg_prediction':
+                # we compare the avg q value of the prediction components to the target y
+                loss = tf.losses.huber_loss(prediction_q, y, weights=self._per_weights)
+                td.append(tf.abs(prediction_q - y))
+                losses.append(loss)
+            elif self._config['loss_formula'] == 'pairwise_component_comparison':
+                for name in training_action_q:
+                    # argument mask is scalar 1 if this argument is used for the transition action, 0 otherwise
+                    argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
+                    num_components = num_components + argument_mask
+                    training_action_q_masked = training_action_q[name] * argument_mask
+                    y_masked = tf.stop_gradient((self._rewards + y_components[name]) * argument_mask)
+                    # we compare the q value of each component to the y value for the same component,
+                    # regardless if that component is used in the y action
+                    loss = tf.losses.huber_loss(training_action_q_masked, y_masked, weights=self._per_weights)
+                    td.append(tf.abs(training_action_q_masked - y_masked))
+                    losses.append(loss)
+            training_losses = tf.reduce_sum(tf.stack(losses), name='training_losses')
+            reg_loss = tf.losses.get_regularization_loss()
+            final_loss = training_losses + reg_loss
+            tf.summary.scalar('training_loss', training_losses)
+            tf.summary.scalar('regularization_loss', reg_loss)
+            if self._config['loss_formula'] == 'avg_y_compared_to_avg_prediction' or not self._config['avg_component_tds']:
+                # for loss forumals where we're adding up different components
+                # we have the option to divide by number of components
                 self._td_abs = tf.reduce_sum(tf.stack(td, axis=1), axis=1)
-            # elif loss_method == 2:
+            else:
+                self._td_abs = tf.reduce_sum(tf.stack(td, axis=1), axis=1) / num_components
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._config['learning_rate_decay_method'] == 'exponential':
