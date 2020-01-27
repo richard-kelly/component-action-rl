@@ -4,7 +4,9 @@
     "batch_runs": 20,
     "copy_model_from": "",
     "inference_only": false,
+    "inference_only_realtime": false,
     "inference_only_epsilon": 0,
+    "inference_only_episodes": 100,
 
     "model_dir": "models/5m_nov_22",
     "model_checkpoint_frequency": 100000,

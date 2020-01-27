@@ -77,7 +77,7 @@ def get_action_function(obs, action, config):
             else:
                 args.append([action[name]])
 
-    if config['inference_only']:
+    if config['inference_only'] and config['inference_only_realtime']:
         print(pysc2_funcs[func_id].name, ':', args)
     return actions.FunctionCall(func_id, args)
 
@@ -296,7 +296,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         ),
         visualize=config['env']['visualize'],
         step_mul=config['env']['step_mul'],
-        realtime=config['inference_only']
+        realtime=config['inference_only'] and config['inference_only_realtime']
     ) as env:
         tf.reset_default_graph()
         tf_config = tf.ConfigProto()
@@ -306,7 +306,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             # observations from the env are tuples of 1 Timestep per player
             obs = env.reset()[0]
             step = 0
-            episode = 1
+            episode = 0
             episode_reward = 0
 
             # Rewards from the map have to be integers,
@@ -318,7 +318,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             match = re.match(r"^combat", config['env']['map_name'])
             win_loss = True if match else False
 
-            while (config['max_steps'] == 0 or step <= config['max_steps']) and (config['max_episodes'] == 0 or episode <= config['max_episodes']):
+            while (config['max_steps'] == 0 or step < config['max_steps']) and (config['max_episodes'] == 0 or episode < config['max_episodes']):
                 step += 1
                 state = preprocess_state(obs, config)
                 available_actions = obs.observation['available_actions']
@@ -327,6 +327,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                 episode_reward += step_reward
                 win = 0
                 if obs.step_type is StepType.LAST:
+                    episode += 1
                     terminal = True
                     # if this map type uses this win/loss calc
                     if win_loss:
@@ -345,7 +346,6 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                     if max_ep_score is None or episode_reward > max_ep_score:
                         max_ep_score = episode_reward
                     episode_reward = 0
-                    episode += 1
                 else:
                     terminal = False
 
@@ -369,6 +369,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                 # actions passed into env.step() are in a list with one action per player
                 obs = env.step([action_for_sc])[0]
 
+    # write out run stats to output file if doing a batch
     if output_file is not None:
         with open(output_file, 'a+') as f:
             avg_last = sum(last_n_ep_score) / len(last_n_ep_score)
@@ -388,6 +389,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             columns.append(win_count / episode)
             f.write(','.join(str(val) for val in columns) + '\n')
 
+    # write out the stats of which actions were used to a file if training
     if not config['inference_only']:
         with open(config['model_dir'] + '/action_stats.csv', 'a+') as f:
             headers = []
@@ -406,6 +408,14 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                 for key in actions_used:
                     episode_actions.append(actions_used[key][i])
                 f.write(','.join(str(val) for val in episode_actions) + '\n')
+
+    # print out some results of the run if we are doing inference only not in realtime
+    if config['inference_only'] and not config['inference_only_realtime']:
+        print('Inference_only summary for', config['model_dir'] + ':')
+        print('Num episodes:', episode)
+        print('Win rate:', win_count / episode)
+        print('Average score:', sum(all_ep_scores) / episode)
+        print('Max score:', max_ep_score)
 
 
 def main():
@@ -427,11 +437,23 @@ def main():
         base_config = json.load(fp=fp)
 
     # bypass everything else if we are doing inference only
+    always_use_from_base_config = [
+        'inference_only',
+        'inference_only_epsilon',
+        'inference_only_realtime',
+        'inference_only_episodes'
+    ]
     if base_config['inference_only']:
         with open(base_config['model_dir'] + '/config.json', 'r') as fp:
             config = json.load(fp=fp)
-        config['inference_only'] = True
-        config['inference_only_epsilon'] = base_config['inference_only_epsilon']
+        for option in always_use_from_base_config:
+            config[option] = base_config[option]
+
+        # in inference only mode we don't care about training stop times
+        config['max_steps'] = 0
+        config['max_episodes'] = 0
+        if config['inference_only_episodes'] > 0:
+            config['max_episodes'] = config['inference_only_episodes']
         run_one_env(config, rename_if_duplicate=False)
         exit(0)
 
