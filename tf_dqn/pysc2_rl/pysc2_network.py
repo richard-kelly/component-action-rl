@@ -364,6 +364,8 @@ class SC2Network:
         # expecting spec to be a list of lists of dicts.
         # each inner list is a list of conv layers using the same input to be concatenated
         # each dict gives the number of filters and kernel size of a conv layer
+        original_layers = inputs
+
         num_output_layers = 0
         for conv_unit in spec:
             num_output_layers = 0
@@ -379,6 +381,9 @@ class SC2Network:
                 conv_layer = tf.layers.batch_normalization(conv_layer, training=self._training)
                 conv_layers.append(conv_layer)
                 num_output_layers += conv['filters']
+            if self._config['network_conv_propagate_inputs']:
+                conv_layers.append(original_layers)
+                num_output_layers += original_layers.shape[-1]
             inputs = tf.concat(conv_layers, axis=-1)
         return num_output_layers, inputs
 

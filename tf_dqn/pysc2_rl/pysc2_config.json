@@ -71,6 +71,7 @@
         "value_network": [1024, 1024],
         "non_spatial_network": [1024, 1024]
     },
+    "network_conv_propagate_inputs": true,
 
     "env": {
         "screen_size": 84,
