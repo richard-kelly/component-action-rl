@@ -587,9 +587,22 @@ class SC2Network:
             tf.summary.scalar('episode_win', self._episode_win)
             self._avg_episode_win = tf.placeholder(shape=[], dtype=tf.float32, name='avg_episode_win')
             tf.summary.scalar('avg_episode_win', self._avg_episode_win)
+
             self._epsilon = tf.placeholder(shape=[], dtype=tf.float32, name='episode_ending_epsilon')
             tf.summary.scalar('episode_ending_epsilon', self._epsilon)
         self._episode_summaries = tf.summary.merge_all(scope='episode_summaries')
+
+        with tf.variable_scope('evaluation_episode_summaries'):
+            # the same ones as above, but for evaluation episodes only
+            self._eval_episode_score = tf.placeholder(shape=[], dtype=tf.float32, name='eval_episode_score')
+            tf.summary.scalar('eval_episode_score', self._eval_episode_score)
+            self._eval_avg_episode_score = tf.placeholder(shape=[], dtype=tf.float32, name='eval_avg_episode_score')
+            tf.summary.scalar('eval_avg_episode_score', self._eval_avg_episode_score)
+            self._eval_episode_win = tf.placeholder(shape=[], dtype=tf.float32, name='eval_episode_win')
+            tf.summary.scalar('eval_episode_win', self._eval_episode_win)
+            self._eval_avg_episode_win = tf.placeholder(shape=[], dtype=tf.float32, name='eval_avg_episode_win')
+            tf.summary.scalar('eval_avg_episode_win', self._eval_avg_episode_win)
+        self._eval_episode_summaries = tf.summary.merge_all(scope='evaluation_episode_summaries')
 
         with tf.variable_scope('predict_summaries'):
             predict_actions = {}
@@ -625,6 +638,17 @@ class SC2Network:
                 self._episode_win: win,
                 self._avg_episode_win: avg_win,
                 self._epsilon: epsilon
+            }
+        )
+
+    def eval_episode_summary(self, sess, score, avg_score_all_episodes, win, avg_win):
+        return sess.run(
+            self._eval_episode_summaries,
+            feed_dict={
+                self._eval_episode_score: score,
+                self._eval_avg_episode_score: avg_score_all_episodes,
+                self._eval_episode_win: win,
+                self._eval_avg_episode_win: avg_win
             }
         )
 

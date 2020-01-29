@@ -16,6 +16,10 @@ class DQNAgent:
         self._episode_score = 0
         self._average_episode_score = 0
         self._average_episode_win = 0
+        # versions of the above for eval episodes only
+        self._eval_episodes = 0
+        self._eval_average_episode_score = 0
+        self._eval_average_episode_win = 0
         # if doing inference only, we don't need to populate the experience memory
         self._memory_start_size_reached = config['inference_only']
         self._last_state = []
@@ -85,7 +89,7 @@ class DQNAgent:
             self._sess.run(self._network.var_init)
             self._network.update_target_q_net(self._sess)
 
-    def observe(self, terminal=False, reward=0, win=0):
+    def observe(self, terminal=False, reward=0, win=0, eval_episode=False):
         self._episode_score += reward
         if terminal:
             self._average_episode_score = (self._average_episode_score * self._episodes + self._episode_score) / (self._episodes + 1)
