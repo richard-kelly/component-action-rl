@@ -92,24 +92,37 @@ class DQNAgent:
     def observe(self, terminal=False, reward=0, win=0, eval_episode=False):
         self._episode_score += reward
         if terminal:
-            self._average_episode_score = (self._average_episode_score * self._episodes + self._episode_score) / (self._episodes + 1)
-            self._average_episode_win = (self._average_episode_win * self._episodes + win) / (self._episodes + 1)
-            epsilon = self._epsilon if self._memory_start_size_reached else 1.0
-            epsilon = epsilon if not self._config['inference_only'] else self._config['inference_only_epsilon']
-            summary = self._network.episode_summary(
-                self._sess,
-                self._episode_score,
-                self._average_episode_score,
-                win,
-                self._average_episode_win,
-                epsilon
-            )
+            if eval_episode:
+                self._eval_average_episode_score = (self._eval_average_episode_score * self._eval_episodes + self._episode_score) / (self._eval_episodes + 1)
+                self._eval_average_episode_win = (self._eval_average_episode_win * self._episodes + win) / (self._episodes + 1)
+                summary = self._network.eval_episode_summary(
+                    self._sess,
+                    self._episode_score,
+                    self._eval_average_episode_score,
+                    win,
+                    self._eval_average_episode_win
+                )
+                self._eval_episodes += 1
+            else:
+                self._average_episode_score = (self._average_episode_score * self._episodes + self._episode_score) / (self._episodes + 1)
+                self._average_episode_win = (self._average_episode_win * self._episodes + win) / (self._episodes + 1)
+                epsilon = self._epsilon if self._memory_start_size_reached else 1.0
+                epsilon = epsilon if not self._config['inference_only'] else self._config['inference_only_epsilon']
+                summary = self._network.episode_summary(
+                    self._sess,
+                    self._episode_score,
+                    self._average_episode_score,
+                    win,
+                    self._average_episode_win,
+                    epsilon
+                )
+                self._episodes += 1
             if not self._config['inference_only']:
                 self._writer.add_summary(summary, self._steps)
             self._episode_score = 0
 
-        # don't store things in memory if only doing inference
-        if not self._config['inference_only']:
+        # don't store things in memory if only doing inference or not training on eval episodes
+        if not self._config['inference_only'] and (not eval_episode or self._config['train_on_eval_episodes']):
             for i in range(len(self._last_reward)):
                 self._last_reward[i-1] = self._last_reward[i-1] + reward * self._config['discount'] ** (i + 1)
             self._last_reward.append(reward)
@@ -118,14 +131,18 @@ class DQNAgent:
             if terminal:
                 for i in range(len(self._last_state)):
                     self._memory.add_sample(self._last_state.pop(0), self._last_action.pop(0), self._last_reward.pop(0), None, True)
-                self._episodes += 1
 
-    def act(self, state, available_actions):
-        action = self._choose_action(state, available_actions)
-        self._steps += 1
+    def act(self, state, available_actions, eval_episode=False):
+        action = self._choose_action(state, available_actions, force_inference=eval_episode)
+        # if we are doing an eval ep and not training on it then we don't advance the training steps
+        # or do any upkeep related to training
+        if not eval_episode or self._config['train_on_eval_episodes']:
+            self._steps += 1
 
         # if only doing inference no need to store anything in memory, update network, etc.
-        if not self._config['inference_only']:
+        # also if doing an eval episode and not training on those no need to train or store in memory
+        if not self._config['inference_only'] and (not eval_episode or self._config['train_on_eval_episodes']):
+            # store a sample in experiences
             if len(self._last_state) >= self._config['bootstrapping_steps']:
                 self._memory.add_sample(self._last_state.pop(0), self._last_action.pop(0), self._last_reward.pop(0), state, False)
 
@@ -165,12 +182,12 @@ class DQNAgent:
         elif self._config['decay_type'] == "linear":
             self._epsilon = self._epsilon - (self._decay * steps)
 
-    def _choose_action(self, state, available_actions):
+    def _choose_action(self, state, available_actions, force_inference=False):
         action = {}
 
         # use epsilon set in config if doing inference only, otherwise use calculated current epsilon
         epsilon = self._config['inference_only_epsilon'] if self._config['inference_only'] else self._epsilon
-        if not self._memory_start_size_reached or random.random() < epsilon:
+        if not force_inference and (not self._memory_start_size_reached or random.random() < epsilon):
             # take a random action
             if self._sample_action is None:
                 # store one action to serve as action specification
@@ -189,7 +206,7 @@ class DQNAgent:
         else:
             # get action by inference from network
             summary, pred = self._network.predict_one(self._sess, state)
-            if not self._config['inference_only']:
+            if not self._config['inference_only'] and not force_inference:
                 self._writer.add_summary(summary, self._steps)
             for name, q_values in pred.items():
                 if name == 'function':

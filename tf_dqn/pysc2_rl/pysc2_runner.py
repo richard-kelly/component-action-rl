@@ -305,9 +305,12 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             rl_agent = DQNAgent(sess, config, restore)
             # observations from the env are tuples of 1 Timestep per player
             obs = env.reset()[0]
-            step = 0
-            episode = 0
+            step = 1
+            episode = 1
             episode_reward = 0
+
+            # if we are using evaluation episodes, this will be true during those episodes
+            eval_episode = False
 
             # Rewards from the map have to be integers,
             # and some maps calculate normalized float rewards and then multiply them by some factor.
@@ -318,8 +321,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             match = re.match(r"^combat", config['env']['map_name'])
             win_loss = True if match else False
 
-            while (config['max_steps'] == 0 or step < config['max_steps']) and (config['max_episodes'] == 0 or episode < config['max_episodes']):
-                step += 1
+            while (config['max_steps'] == 0 or step <= config['max_steps']) and (config['max_episodes'] == 0 or episode <= config['max_episodes']):
                 state = preprocess_state(obs, config)
                 available_actions = obs.observation['available_actions']
 
@@ -327,7 +329,6 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                 episode_reward += step_reward
                 win = 0
                 if obs.step_type is StepType.LAST:
-                    episode += 1
                     terminal = True
                     # if this map type uses this win/loss calc
                     if win_loss:
@@ -335,27 +336,45 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                         if win == 1:
                             win_count += 1
 
-                    print("Episode", episode, "finished. Steps:", step, "Win:", win, "Score:", episode_reward)
-                    if len(last_n_ep_score) == num_eps:
-                        last_n_ep_score.pop(0)
-                        last_n_ep_wins.pop(0)
-                    last_n_ep_score.append(episode_reward)
-                    last_n_ep_wins.append(win)
-                    all_ep_scores.append(episode_reward)
-                    all_ep_wins.append(win)
-                    if max_ep_score is None or episode_reward > max_ep_score:
-                        max_ep_score = episode_reward
-                    episode_reward = 0
+                    if eval_episode:
+                        print("Eval Episode", episode, "finished. Steps:", step, "Win:", win, "Score:", episode_reward)
+                    else:
+                        print("Episode", episode, "finished. Steps:", step, "Win:", win, "Score:", episode_reward)
+
+                    # don't add to run stats if doing an eval episode and not training
+                    if not eval_episode or config['train_on_eval_episodes']:
+                        if len(last_n_ep_score) == num_eps:
+                            last_n_ep_score.pop(0)
+                            last_n_ep_wins.pop(0)
+                        last_n_ep_score.append(episode_reward)
+                        last_n_ep_wins.append(win)
+                        all_ep_scores.append(episode_reward)
+                        all_ep_wins.append(win)
+                        if max_ep_score is None or episode_reward > max_ep_score:
+                            max_ep_score = episode_reward
+                        episode_reward = 0
+
+                    episode += 1
+
+                    # check for eval episode. can't have two eval eps in a row. repeat episode num after eval ep
+                    if eval_episode and not config['train_on_eval_episodes']:
+                        eval_episode = False
+                        episode -= 1
+                    else:
+                        eval_episode = config['do_eval_episodes'] and episode % config['one_eval_episode_per'] == 0
+
                 else:
                     terminal = False
 
+                if not eval_episode or config['train_on_eval_episodes']:
+                    step += 1
                 if step > 1:
-                    rl_agent.observe(terminal=terminal, reward=step_reward, win=win)
+                    rl_agent.observe(terminal=terminal, reward=step_reward, win=win, eval_episode=eval_episode)
 
-                action = rl_agent.act(state, available_actions)
+                action = rl_agent.act(state, available_actions, eval_episode=eval_episode)
                 action_for_sc = get_action_function(obs, action, config)
 
-                if not config['inference_only']:
+                if not config['inference_only'] and (not eval_episode or config['train_on_eval_episodes']):
                     action_name = actions.FUNCTIONS[action_for_sc.function].name
                     if action_name not in actions_used:
                         actions_used[action_name] = [0] * (episode - 1)

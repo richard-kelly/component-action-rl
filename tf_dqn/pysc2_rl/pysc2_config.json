@@ -29,6 +29,10 @@
     "reg_scale": 1e-3,
     "use_component_weights": false,
 
+    "do_eval_episodes": true,
+    "train_on_eval_episodes": false,
+    "one_eval_episode_per": 10,
+
     "loss_formula": "avg_y_compared_to_components",
     "loss_formula_choices": [
         "avg_y_compared_to_components",
