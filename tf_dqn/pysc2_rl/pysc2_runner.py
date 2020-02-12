@@ -352,8 +352,8 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                         all_ep_wins.append(win)
                         if max_ep_score is None or episode_reward > max_ep_score:
                             max_ep_score = episode_reward
-                        episode_reward = 0
 
+                    episode_reward = 0
                     episode += 1
 
                     # check for eval episode. can't have two eval eps in a row. repeat episode num after eval ep
