@@ -130,6 +130,12 @@ def compute_action_list(rules):
 def process_config_env(config):
     config['env']['computed_action_list'] = compute_action_list(config['env']['action_functions'])
 
+    # some values can be overridden to be based on number of steps
+    if config['match_per_beta_anneal_steps_to_max']:
+        config['per_beta_anneal_steps'] = int(config['max_steps'] * config['match_per_beta_anneal_steps_ratio'])
+    if config['match_epsilon_decay_steps_to_max']:
+        config['decay_steps'] = int(config['max_steps'] * config['match_epsilon_decay_steps_ratio'])
+
     # modify the list of computed actions based on the map name for maps that pre-select units or have control groups pre-assigned
     preselected = False
     num_groups = 0
