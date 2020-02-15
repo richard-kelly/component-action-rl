@@ -126,15 +126,19 @@ def compute_action_list(rules):
     return computed
 
 
-# Add some extra properties to the config['env'] section that will be used by the Network
-def process_config_env(config):
-    config['env']['computed_action_list'] = compute_action_list(config['env']['action_functions'])
-
+def process_config_post_batch(config):
     # some values can be overridden to be based on number of steps
     if config['match_per_beta_anneal_steps_to_max']:
         config['per_beta_anneal_steps'] = int(config['max_steps'] * config['match_per_beta_anneal_steps_ratio'])
     if config['match_epsilon_decay_steps_to_max']:
         config['decay_steps'] = int(config['max_steps'] * config['match_epsilon_decay_steps_ratio'])
+
+    return config
+
+
+# Add some extra properties to the config['env'] section that will be used by the Network
+def process_config_env(config):
+    config['env']['computed_action_list'] = compute_action_list(config['env']['action_functions'])
 
     # modify the list of computed actions based on the map name for maps that pre-select units or have control groups pre-assigned
     preselected = False
@@ -547,6 +551,9 @@ def main():
                     config[param] = new_val
                     name += '_' + param + '_' + str(new_val)
                 config['model_dir'] = base_name + '/' + name
+
+                # some things need to be adjusted after the batch variables are altered
+                config = process_config_post_batch(config)
                 print('****** Starting a new run in this batch: ' + name + ' ******')
                 run_one_env(config, count, run_variables, rename_if_duplicate=True, output_file=summary_file_name)
         else:
