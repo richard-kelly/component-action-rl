@@ -5,6 +5,8 @@ import math
 from pysc2.lib import actions as pysc2_actions
 from pysc2.lib import static_data as pysc2_static_data
 
+spatial_components = ['screen', 'screen2', 'minimap']
+
 
 class SC2Network:
     def __init__(
@@ -46,100 +48,105 @@ class SC2Network:
         self._define_model()
 
     def _get_network(self, inputs):
-        # all processed screen input will be added to this list
-        to_concat = []
+        with tf.variable_scope('input_processing'):
+            # all processed screen input will be added to this list
+            to_concat = []
 
-        screen_player_relative_one_hot = tf.contrib.layers.one_hot_encoding(
-            labels=inputs['screen_player_relative'],
-            num_classes=5
-        )
-        # we only want self and enemy:
-        # NONE = 0, SELF = 1, ALLY = 2, NEUTRAL = 3, ENEMY = 4
-        screen_player_relative_self = screen_player_relative_one_hot[:, :, :, 1]
-        screen_player_relative_self = tf.expand_dims(screen_player_relative_self, axis=-1)
-        to_concat.append(screen_player_relative_self)
-        screen_player_relative_enemy = screen_player_relative_one_hot[:, :, :, 4]
-        screen_player_relative_enemy = tf.expand_dims(screen_player_relative_enemy, axis=-1)
-        to_concat.append(screen_player_relative_enemy)
+            screen_player_relative_one_hot = tf.contrib.layers.one_hot_encoding(
+                labels=inputs['screen_player_relative'],
+                num_classes=5
+            )
+            # we only want self and enemy:
+            # NONE = 0, SELF = 1, ALLY = 2, NEUTRAL = 3, ENEMY = 4
+            screen_player_relative_self = screen_player_relative_one_hot[:, :, :, 1]
+            screen_player_relative_self = tf.expand_dims(screen_player_relative_self, axis=-1)
+            to_concat.append(screen_player_relative_self)
+            screen_player_relative_enemy = screen_player_relative_one_hot[:, :, :, 4]
+            screen_player_relative_enemy = tf.expand_dims(screen_player_relative_enemy, axis=-1)
+            to_concat.append(screen_player_relative_enemy)
 
-        # observation is in int, but network uses floats
-        # selected is binary, just 1 or 0, so is already in one hot form
-        screen_selected_one_hot = tf.cast(inputs['screen_selected'], dtype=tf.float32)
-        screen_selected_one_hot = tf.expand_dims(screen_selected_one_hot, axis=-1)
-        to_concat.append(screen_selected_one_hot)
+            # observation is in int, but network uses floats
+            # selected is binary, just 1 or 0, so is already in one hot form
+            screen_selected_one_hot = tf.cast(inputs['screen_selected'], dtype=tf.float32)
+            screen_selected_one_hot = tf.expand_dims(screen_selected_one_hot, axis=-1)
+            to_concat.append(screen_selected_one_hot)
 
-        if self._config['env']['use_hp_log_values']:
-            # scale hit points (0-?) logarithmically (add 1 to avoid undefined) since they can be so high
-            screen_unit_hit_points = tf.math.log1p(tf.cast(inputs['screen_unit_hit_points'], dtype=tf.float32))
-            # add a dimension (depth)
-            screen_unit_hit_points = tf.expand_dims(screen_unit_hit_points, axis=-1)
-            to_concat.append(screen_unit_hit_points)
-        if self._config['env']['use_shield_log_values']:
-            screen_unit_shields = tf.math.log1p(tf.cast(inputs['screen_unit_shields'], dtype=tf.float32))
-            screen_unit_shields = tf.expand_dims(screen_unit_shields, axis=-1)
-            to_concat.append(screen_unit_shields)
+            if self._config['env']['use_hp_log_values']:
+                # scale hit points (0-?) logarithmically (add 1 to avoid undefined) since they can be so high
+                screen_unit_hit_points = tf.math.log1p(tf.cast(inputs['screen_unit_hit_points'], dtype=tf.float32))
+                # add a dimension (depth)
+                screen_unit_hit_points = tf.expand_dims(screen_unit_hit_points, axis=-1)
+                to_concat.append(screen_unit_hit_points)
+            if self._config['env']['use_shield_log_values']:
+                screen_unit_shields = tf.math.log1p(tf.cast(inputs['screen_unit_shields'], dtype=tf.float32))
+                screen_unit_shields = tf.expand_dims(screen_unit_shields, axis=-1)
+                to_concat.append(screen_unit_shields)
 
-        if self._config['env']['use_hp_ratios']:
-            # ratio goes up to 255 max
-            screen_unit_hit_points_ratio = tf.cast(inputs['screen_unit_hit_points_ratio'] / 255, dtype=tf.float32)
-            screen_unit_hit_points_ratio = tf.expand_dims(screen_unit_hit_points_ratio, axis=-1)
-            to_concat.append(screen_unit_hit_points_ratio)
-        if self._config['env']['use_shield_ratios']:
-            screen_unit_shields_ratio = tf.cast(inputs['screen_unit_shields_ratio'] / 255, dtype=tf.float32)
-            screen_unit_shields_ratio = tf.expand_dims(screen_unit_shields_ratio, axis=-1)
-            to_concat.append(screen_unit_shields_ratio)
+            if self._config['env']['use_hp_ratios']:
+                # ratio goes up to 255 max
+                screen_unit_hit_points_ratio = tf.cast(inputs['screen_unit_hit_points_ratio'] / 255, dtype=tf.float32)
+                screen_unit_hit_points_ratio = tf.expand_dims(screen_unit_hit_points_ratio, axis=-1)
+                to_concat.append(screen_unit_hit_points_ratio)
+            if self._config['env']['use_shield_ratios']:
+                screen_unit_shields_ratio = tf.cast(inputs['screen_unit_shields_ratio'] / 255, dtype=tf.float32)
+                screen_unit_shields_ratio = tf.expand_dims(screen_unit_shields_ratio, axis=-1)
+                to_concat.append(screen_unit_shields_ratio)
 
-        if self._config['env']['use_hp_cats']:
-            ones = tf.ones(tf.shape(inputs['screen_unit_hit_points']))
-            zeros = tf.zeros(tf.shape(inputs['screen_unit_hit_points']))
-            hp = inputs['screen_unit_hit_points']
-            # add a dimension (depth) to each
-            vals = self._config['env']['hp_cats_values']
-            to_concat.append(tf.expand_dims(tf.where(hp <= vals[0], ones, zeros), axis=-1))
-            for i in range(1, len(vals)):
-                to_concat.append(
-                    tf.expand_dims(tf.where(tf.logical_and(hp > vals[i-1], hp <= vals[i]), ones, zeros), axis=-1)
-                )
-            to_concat.append(tf.expand_dims(tf.where(hp > vals[-1], ones, zeros), axis=-1))
-        if self._config['env']['use_shield_cats']:
-            ones = tf.ones(tf.shape(inputs['screen_unit_hit_points']))
-            zeros = tf.zeros(tf.shape(inputs['screen_unit_hit_points']))
-            sh = inputs['screen_unit_shields']
-            vals = self._config['env']['hp_cats_values']
-            to_concat.append(tf.expand_dims(tf.where(sh <= vals[0], ones, zeros), axis=-1))
-            for i in range(1, len(vals)):
-                to_concat.append(
-                    tf.expand_dims(tf.where(tf.logical_and(sh > vals[i - 1], sh <= vals[i]), ones, zeros), axis=-1)
-                )
-            to_concat.append(tf.expand_dims(tf.where(sh > vals[-1], ones, zeros), axis=-1))
+            if self._config['env']['use_hp_cats']:
+                ones = tf.ones(tf.shape(inputs['screen_unit_hit_points']))
+                zeros = tf.zeros(tf.shape(inputs['screen_unit_hit_points']))
+                hp = inputs['screen_unit_hit_points']
+                # add a dimension (depth) to each
+                vals = self._config['env']['hp_cats_values']
+                to_concat.append(tf.expand_dims(tf.where(hp <= vals[0], ones, zeros), axis=-1))
+                for i in range(1, len(vals)):
+                    to_concat.append(
+                        tf.expand_dims(tf.where(tf.logical_and(hp > vals[i-1], hp <= vals[i]), ones, zeros), axis=-1)
+                    )
+                to_concat.append(tf.expand_dims(tf.where(hp > vals[-1], ones, zeros), axis=-1))
+            if self._config['env']['use_shield_cats']:
+                ones = tf.ones(tf.shape(inputs['screen_unit_hit_points']))
+                zeros = tf.zeros(tf.shape(inputs['screen_unit_hit_points']))
+                sh = inputs['screen_unit_shields']
+                vals = self._config['env']['hp_cats_values']
+                to_concat.append(tf.expand_dims(tf.where(sh <= vals[0], ones, zeros), axis=-1))
+                for i in range(1, len(vals)):
+                    to_concat.append(
+                        tf.expand_dims(tf.where(tf.logical_and(sh > vals[i - 1], sh <= vals[i]), ones, zeros), axis=-1)
+                    )
+                to_concat.append(tf.expand_dims(tf.where(sh > vals[-1], ones, zeros), axis=-1))
 
-        if self._config['env']['use_all_unit_types']:
-            # pysc2 has a list of known unit types, and the max unit id is around 2000 but there are 259 units (v3.0)
-            # 4th root of 259 is ~4 (Google rule of thumb for ratio of embedding dimensions to number of categories)
-            # src: https://developers.googleblog.com/2017/11/introducing-tensorflow-feature-columns.html
-            # embedding output: [batch_size, screen y, screen x, output_dim]
-            screen_unit_type = tf.keras.layers.Embedding(
-                input_dim=len(pysc2_static_data.UNIT_TYPES),
-                output_dim=4
-            )(inputs['screen_unit_type'])
-            to_concat.append(screen_unit_type)
-        elif self._config['env']['use_specific_unit_types']:
-            screen_unit_type = tf.contrib.layers.one_hot_encoding(
-                labels=inputs['screen_unit_type'],
-                num_classes=len(self._config['env']['specific_unit_types'])
-            )[:, :, :, 1:]
-            # above throws away first layer that has zeros
-            to_concat.append(screen_unit_type)
+            if self._config['env']['use_all_unit_types']:
+                # pysc2 has a list of known unit types, and the max unit id is around 2000 but there are 259 units (v3.0)
+                # 4th root of 259 is ~4 (Google rule of thumb for ratio of embedding dimensions to number of categories)
+                # src: https://developers.googleblog.com/2017/11/introducing-tensorflow-feature-columns.html
+                # embedding output: [batch_size, screen y, screen x, output_dim]
+                screen_unit_type = tf.keras.layers.Embedding(
+                    input_dim=len(pysc2_static_data.UNIT_TYPES),
+                    output_dim=4
+                )(inputs['screen_unit_type'])
+                to_concat.append(screen_unit_type)
+            elif self._config['env']['use_specific_unit_types']:
+                screen_unit_type = tf.contrib.layers.one_hot_encoding(
+                    labels=inputs['screen_unit_type'],
+                    num_classes=len(self._config['env']['specific_unit_types'])
+                )[:, :, :, 1:]
+                # above throws away first layer that has zeros
+                to_concat.append(screen_unit_type)
 
-        screen = tf.concat(to_concat, axis=-1, name='screen_input')
+            screen = tf.concat(to_concat, axis=-1, name='screen_input')
 
         with tf.variable_scope('spatial_network'):
             conv_spatial_num_filters, conv_spatial = self._get_conv_layers(screen, self._config['network_structure']['spatial_network'])
 
         with tf.variable_scope('spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
-            # TODO: come up with better scaling based on which action components are used in training.
-            scale = 1 / math.sqrt(2)
+            # (always one more branch than number of spatial components)
+            spatial_count = 1
+            for name, using in self._action_components.items():
+                if using and name in spatial_components:
+                    spatial_count += 1
+            scale = 1 / spatial_count
             conv_spatial = (1 - scale) * tf.stop_gradient(conv_spatial) + scale * conv_spatial
 
         # spatial policy splits off before max pooling
@@ -177,74 +184,60 @@ class SC2Network:
                 )
                 value = tf.layers.batch_normalization(value, training=self._training)
 
-        with tf.variable_scope('non_spatial_network'):
+        with tf.variable_scope('shared_non_spatial_network'):
             fc_non_spatial = self._get_dense_layers(non_spatial_flat, self._config['network_structure']['non_spatial_network'])
 
         with tf.variable_scope('non_spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
-            # TODO: come up with better scaling based on which action components are used in training.
-            scale = 1 / math.sqrt(2)
+            non_spatial_count = 0
+            for name, using in self._action_components.items():
+                if using and name not in spatial_components:
+                    non_spatial_count += 1
+            scale = 1 / non_spatial_count
+
             fc_non_spatial = (1 - scale) * tf.stop_gradient(fc_non_spatial) + scale * fc_non_spatial
 
-        spatial_policy_1 = tf.layers.conv2d(
-            inputs=conv_spatial,
-            filters=1,
-            kernel_size=1,
-            padding='same',
-            name='spatial_policy_1'
-        )
-
-        if self._action_components['screen2']:
-            spatial_policy_2 = tf.layers.conv2d(
-                inputs=conv_spatial,
-                filters=1,
-                kernel_size=1,
-                padding='same',
-                name='spatial_policy_2'
-            )
-        else:
-            spatial_policy_2 = None
-
-        comp = self._action_components
         num_options = self._get_num_options_per_function()
-        action_q_vals = dict(
-            function=tf.layers.dense(fc_non_spatial, num_options['function'], name='function'),
-            screen=tf.reshape(spatial_policy_1, [-1, num_options['screen']], name='screen') if comp['screen'] else None,
-            minimap=tf.reshape(spatial_policy_1, [-1, num_options['minimap']], name='minimap') if comp['minimap'] else None,
-            screen2=tf.reshape(spatial_policy_2, [-1, num_options['screen2']], name='screen2') if comp['screen2'] else None,
-            queued=tf.layers.dense(fc_non_spatial, num_options['queued'], name='queued') if comp['queued'] else None,
-            control_group_act=tf.layers.dense(fc_non_spatial, num_options['control_group_act'], name='control_group_act') if comp['control_group_act'] else None,
-            control_group_id=tf.layers.dense(fc_non_spatial, num_options['control_group_id'], name='control_group_id') if comp['control_group_id'] else None,
-            select_point_act=tf.layers.dense(fc_non_spatial, num_options['select_point_act'], name='select_point_act') if comp['select_point_act'] else None,
-            select_add=tf.layers.dense(fc_non_spatial, num_options['select_add'], name='select_add') if comp['select_add'] else None,
-            select_unit_act=tf.layers.dense(fc_non_spatial, num_options['select_unit_act'], name='select_unit_act') if comp['select_unit_act'] else None,
-            select_unit_id=tf.layers.dense(fc_non_spatial, num_options['select_unit_id'], name='select_unit_id') if comp['select_unit_id'] else None,
-            select_worker=tf.layers.dense(fc_non_spatial, num_options['select_worker'], name='select_worker') if comp['select_worker'] else None,
-            build_queue_id=tf.layers.dense(fc_non_spatial, num_options['build_queue_id'], name='build_queue_id') if comp['build_queue_id'] else None,
-            unload_id=tf.layers.dense(fc_non_spatial, num_options['unload_id'], name='unload_id') if comp['unload_id'] else None,
-        )
 
-        # remove actions that are not used in this network (set to None above)
-        action_q_vals_filtered = {}
-        for name, val in action_q_vals.items():
-            if val is not None:
-                action_q_vals_filtered[name] = val
+        component_streams = {}
+        for c in self._action_components:
+            if self._action_components[c]:
+                with tf.variable_scope(c + '_branch'):
+                    if c in spatial_components:
+                        spatial_policy = tf.layers.conv2d(
+                            inputs=conv_spatial,
+                            filters=1,
+                            kernel_size=1,
+                            padding='same'
+                        )
+                        component_streams[c] = tf.reshape(spatial_policy, [-1, num_options[c]], name=c)
+                    else:
+                        # optionally one stream of fully connected layers per component
+                        spec = self._config['network_structure']['component_stream_default']
+                        if c in self._config['network_structure']['component_stream_specs']:
+                            spec = self._config['network_structure']['component_stream_specs'][c]
+                        component_fc = self._get_dense_layers(fc_non_spatial, spec)
+                        # for non-spatial components make a dense layer with width equal to number of possible actions
+                        component_streams[c] = tf.layers.dense(component_fc, num_options[c], name=c)
 
+        action_q_vals = {}
         if self._config['dueling_network']:
-            # action_q_vals_filtered is A(s,a), value is V(s)
+            # action_q_vals is A(s,a), value is V(s)
             # Q(s,a) = V(s) + A(s,a) - 1/|A| * SUM_a(A(s,a))
             with tf.variable_scope('q_vals'):
-                for name, advantage in action_q_vals_filtered.items():
-                    action_q_vals_filtered[name] = tf.add(value, (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True)), name=name)
+                for name, advantage in component_streams.items():
+                    action_q_vals[name] = tf.add(value, (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True)), name=name)
+        else:
+            action_q_vals = component_streams
 
         # filter out actions ('function') that are illegal for this state
         with tf.variable_scope('available_actions_mask'):
             # available actions mask; avoids using negative infinity, and is the right size
-            action_neg_inf_q_vals = action_q_vals_filtered['function'] * 0 - 1000000
-            action_q_vals_filtered['function'] = tf.where(inputs['available_actions'], action_q_vals_filtered['function'], action_neg_inf_q_vals)
+            action_neg_inf_q_vals = action_q_vals['function'] * 0 - 1000000
+            action_q_vals['function'] = tf.where(inputs['available_actions'], action_q_vals['function'], action_neg_inf_q_vals)
 
-        # return action_q_vals_filtered, q_val_weights
-        return action_q_vals_filtered
+        # return action_q_vals, q_val_weights
+        return action_q_vals
 
     def _get_state_placeholder(self):
         screen_shape = [None, self._config['env']['screen_size'], self._config['env']['screen_size']]
