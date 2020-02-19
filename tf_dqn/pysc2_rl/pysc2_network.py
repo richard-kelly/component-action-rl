@@ -6,7 +6,25 @@ from pysc2.lib import actions as pysc2_actions
 from pysc2.lib import static_data as pysc2_static_data
 
 spatial_components = ['screen', 'screen2', 'minimap']
-
+all_components = dict(
+        function=True,
+        screen=False,
+        minimap=False,
+        screen2=False,
+        queued=False,
+        control_group_act=False,
+        control_group_id=False,
+        select_point_act=False,
+        select_add=False,
+        select_unit_act=False,
+        select_unit_id=False,
+        select_worker=False,
+        build_queue_id=False,
+        unload_id=False
+    )
+component_order = ['function', 'queued', 'control_group_act', 'control_group_id', 'select_point_act', 'select_add',
+                   'select_unit_act', 'select_unit_id', 'select_worker', 'build_queue_id', 'unload_id',
+                   'screen', 'screen2', 'minimap']
 
 class SC2Network:
     def __init__(
@@ -182,7 +200,8 @@ class SC2Network:
                     kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                     name='value'
                 )
-                value = tf.layers.batch_normalization(value, training=self._training)
+                if self._config['network_structure']['use_batch_norm']:
+                    value = tf.layers.batch_normalization(value, training=self._training)
 
         with tf.variable_scope('shared_non_spatial_network'):
             fc_non_spatial = self._get_dense_layers(non_spatial_flat, self._config['network_structure']['non_spatial_network'])
@@ -200,10 +219,13 @@ class SC2Network:
         num_options = self._get_num_options_per_function()
 
         component_streams = {}
-        for c in self._action_components:
+        action_q_vals = {}
+        action_one_hots = {}
+        for c in component_order:
+            # are we using this component?
             if self._action_components[c]:
                 with tf.variable_scope(c + '_branch'):
-                    if c in spatial_components:
+                    if c in spatial_components and not self._config['network_structure']['use_dense_layers_for_spatial']:
                         spatial_policy = tf.layers.conv2d(
                             inputs=conv_spatial,
                             filters=1,
@@ -216,27 +238,36 @@ class SC2Network:
                         spec = self._config['network_structure']['component_stream_default']
                         if c in self._config['network_structure']['component_stream_specs']:
                             spec = self._config['network_structure']['component_stream_specs'][c]
-                        component_fc = self._get_dense_layers(fc_non_spatial, spec)
+                        stream_input = conv_spatial if c in spatial_components else fc_non_spatial
+                        component_fc = self._get_dense_layers(stream_input, spec)
                         # for non-spatial components make a dense layer with width equal to number of possible actions
                         component_streams[c] = tf.layers.dense(component_fc, num_options[c], name=c)
 
-        action_q_vals = {}
-        if self._config['dueling_network']:
-            # action_q_vals is A(s,a), value is V(s)
-            # Q(s,a) = V(s) + A(s,a) - 1/|A| * SUM_a(A(s,a))
-            with tf.variable_scope('q_vals'):
-                for name, advantage in component_streams.items():
-                    action_q_vals[name] = tf.add(value, (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True)), name=name)
-        else:
-            action_q_vals = component_streams
+                if self._config['dueling_network']:
+                    # action_q_vals is A(s,a), value is V(s)
+                    # Q(s,a) = V(s) + A(s,a) - 1/|A| * SUM_a(A(s,a))
+                    with tf.variable_scope('q_vals'):
+                        advantage = component_streams[c]
+                        action_q_vals[c] = tf.add(value, (advantage - tf.reduce_mean(advantage, axis=1, keepdims=True)), name=name)
 
-        # filter out actions ('function') that are illegal for this state
-        with tf.variable_scope('available_actions_mask'):
-            # available actions mask; avoids using negative infinity, and is the right size
-            action_neg_inf_q_vals = action_q_vals['function'] * 0 - 1000000
-            action_q_vals['function'] = tf.where(inputs['available_actions'], action_q_vals['function'], action_neg_inf_q_vals)
+                else:
+                    action_q_vals[c] = component_streams[c]
 
-        # return action_q_vals, q_val_weights
+                # filter out actions ('function') that are illegal for this state
+                if c == 'function':
+                    with tf.variable_scope('available_actions_mask'):
+                        # available actions mask; avoids using negative infinity, and is the right size
+                        action_neg_inf_q_vals = action_q_vals['function'] * 0 - 1000000
+                        action_q_vals['function'] = tf.where(inputs['available_actions'], action_q_vals['function'], action_neg_inf_q_vals)
+
+                if self._config['network_structure']['use_stream_outputs_as_inputs_to_other_streams']:
+                    with tf.variable_scope('stream_action_one_hot'):
+                        found_dependency = False
+                        for stream, dependencies in self._config['network_structure']['stream_dependencies'].items():
+                            if self._action_components[stream] and c in dependencies:
+                                action_index = tf.math.argmax(action_q_vals[c], axis=-1)
+
+        # return action_q_vals
         return action_q_vals
 
     def _get_state_placeholder(self):
@@ -371,7 +402,8 @@ class SC2Network:
                     padding='same',
                     activation=tf.nn.leaky_relu
                 )
-                conv_layer = tf.layers.batch_normalization(conv_layer, training=self._training)
+                if self._config['network_structure']['use_batch_norm']:
+                    conv_layer = tf.layers.batch_normalization(conv_layer, training=self._training)
                 conv_layers.append(conv_layer)
                 num_output_layers += conv['filters']
             if self._config['network_structure']['network_conv_propagate_inputs']:
@@ -389,7 +421,8 @@ class SC2Network:
                 activation=tf.nn.leaky_relu,
                 kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
             )
-            dense = tf.layers.batch_normalization(dense, training=self._training)
+            if self._config['network_structure']['use_batch_norm']:
+                dense = tf.layers.batch_normalization(dense, training=self._training)
             inputs = dense
         return inputs
 
@@ -561,7 +594,8 @@ class SC2Network:
             lr = self._learning_rate
 
         # must run this op to do batch norm
-        self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        if self._config['network_structure']['use_batch_norm']:
+            self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
         self._optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(final_loss)
         self._optimizer = tf.group([self._optimizer, self._update_ops])

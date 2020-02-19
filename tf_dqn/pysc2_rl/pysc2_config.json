@@ -84,7 +84,14 @@
         "component_stream_specs": {
             "function": []
         },
-        "conv_propagate_inputs": true
+        "use_dense_layers_for_spatial": false,
+        "conv_propagate_inputs": true,
+        "use_stream_outputs_as_inputs_to_other_streams": true,
+        "stream_dependencies": {
+            "screen": ["function"],
+            "screen2": ["screen"]
+        },
+        "use_batch_norm": true
     },
 
     "env": {
