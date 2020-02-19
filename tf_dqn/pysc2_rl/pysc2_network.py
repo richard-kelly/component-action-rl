@@ -374,7 +374,7 @@ class SC2Network:
                 conv_layer = tf.layers.batch_normalization(conv_layer, training=self._training)
                 conv_layers.append(conv_layer)
                 num_output_layers += conv['filters']
-            if self._config['network_conv_propagate_inputs']:
+            if self._config['network_structure']['network_conv_propagate_inputs']:
                 conv_layers.append(original_layers)
                 num_output_layers += original_layers.shape[-1]
             inputs = tf.concat(conv_layers, axis=-1)

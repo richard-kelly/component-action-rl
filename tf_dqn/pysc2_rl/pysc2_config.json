@@ -83,9 +83,9 @@
         "component_stream_default": [],
         "component_stream_specs": {
             "function": []
-        }
+        },
+        "conv_propagate_inputs": true
     },
-    "network_conv_propagate_inputs": true,
 
     "env": {
         "screen_size": 84,
