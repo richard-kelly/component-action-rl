@@ -218,6 +218,7 @@ class SC2Network:
 
         num_options = self._get_num_options_per_function()
 
+        # create each component stream
         component_streams = {}
         action_q_vals = {}
         action_one_hots = {}
@@ -239,6 +240,14 @@ class SC2Network:
                         if c in self._config['network_structure']['component_stream_specs']:
                             spec = self._config['network_structure']['component_stream_specs'][c]
                         stream_input = conv_spatial if c in spatial_components else fc_non_spatial
+
+                        # optionally feed one hot versions of earlier stream outputs to this stream
+                        if self._config['network_structure']['use_stream_outputs_as_inputs_to_other_streams']:
+                            if c in self._config['network_structure']['stream_dependencies']:
+                                dependencies = [stream_input]
+                                for d in self._config['network_structure']['stream_dependencies'][c]:
+                                    dependencies += action_one_hots[d]
+                                stream_input = tf.concat(dependencies, axis=-1)
                         component_fc = self._get_dense_layers(stream_input, spec)
                         # for non-spatial components make a dense layer with width equal to number of possible actions
                         component_streams[c] = tf.layers.dense(component_fc, num_options[c], name=c)
@@ -265,7 +274,13 @@ class SC2Network:
                         found_dependency = False
                         for stream, dependencies in self._config['network_structure']['stream_dependencies'].items():
                             if self._action_components[stream] and c in dependencies:
-                                action_index = tf.math.argmax(action_q_vals[c], axis=-1)
+                                found_dependency = True
+                                break
+                        if found_dependency:
+                            action_index = tf.math.argmax(action_q_vals[c], axis=-1)
+                            action_one_hot = tf.one_hot(action_index, tf.shape(action_q_vals[c])[0])
+                            # argmax should be non-differentiable but just to remind myself use stop_gradient
+                            action_one_hots[c] = tf.stop_gradient(action_one_hot)
 
         # return action_q_vals
         return action_q_vals
