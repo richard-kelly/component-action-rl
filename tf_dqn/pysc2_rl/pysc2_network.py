@@ -671,6 +671,8 @@ class SC2Network:
             keep_checkpoint_every_n_hours=self._config['model_checkpoint_every_n_hours']
         )
 
+        print('Num trainable params:', np.sum([np.prod([y.value for y in x.get_shape()]) for x in tf.all_variables()]))
+
     def episode_summary(self, sess, score, avg_score_all_episodes, win, avg_win, epsilon):
         return sess.run(
             self._episode_summaries,
