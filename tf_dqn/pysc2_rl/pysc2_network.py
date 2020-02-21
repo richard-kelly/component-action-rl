@@ -180,7 +180,7 @@ class SC2Network:
         non_spatial_flat = tf.reshape(
             max_pool,
             shape=[-1, int(self._config['env']['screen_size'] * self._config['env']['screen_size'] / 9 * conv_spatial_num_filters)],
-            name='conv2_spatial_flat'
+            name='non_spatial_flat'
         )
 
         if self._config['dueling_network']:
@@ -239,14 +239,20 @@ class SC2Network:
                         spec = self._config['network_structure']['component_stream_default']
                         if c in self._config['network_structure']['component_stream_specs']:
                             spec = self._config['network_structure']['component_stream_specs'][c]
-                        stream_input = conv_spatial if c in spatial_components else fc_non_spatial
+                        if c in spatial_components:
+                            stream_input = tf.reshape(
+                                conv_spatial,
+                                shape=[-1, self._config['env']['screen_size'] * self._config['env']['screen_size'] * conv_spatial_num_filters]
+                            )
+                        else:
+                            stream_input = fc_non_spatial
 
                         # optionally feed one hot versions of earlier stream outputs to this stream
                         if self._config['network_structure']['use_stream_outputs_as_inputs_to_other_streams']:
                             if c in self._config['network_structure']['stream_dependencies']:
                                 dependencies = [stream_input]
                                 for d in self._config['network_structure']['stream_dependencies'][c]:
-                                    dependencies += action_one_hots[d]
+                                    dependencies.append(action_one_hots[d])
                                 stream_input = tf.concat(dependencies, axis=-1)
                         component_fc = self._get_dense_layers(stream_input, spec)
                         # for non-spatial components make a dense layer with width equal to number of possible actions
@@ -278,7 +284,7 @@ class SC2Network:
                                 break
                         if found_dependency:
                             action_index = tf.math.argmax(action_q_vals[c], axis=-1)
-                            action_one_hot = tf.one_hot(action_index, tf.shape(action_q_vals[c])[0])
+                            action_one_hot = tf.one_hot(action_index, num_options[c])
                             # argmax should be non-differentiable but just to remind myself use stop_gradient
                             action_one_hots[c] = tf.stop_gradient(action_one_hot)
 
@@ -421,7 +427,7 @@ class SC2Network:
                     conv_layer = tf.layers.batch_normalization(conv_layer, training=self._training)
                 conv_layers.append(conv_layer)
                 num_output_layers += conv['filters']
-            if self._config['network_structure']['network_conv_propagate_inputs']:
+            if self._config['network_structure']['conv_propagate_inputs']:
                 conv_layers.append(original_layers)
                 num_output_layers += original_layers.shape[-1]
             inputs = tf.concat(conv_layers, axis=-1)
