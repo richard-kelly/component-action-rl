@@ -161,7 +161,6 @@ class SC2Network:
                 screen,
                 self._config['network_structure']['shared_spatial_network'],
                 self._config['network_structure']['activation'],
-                self._config['network_structure']['use_batch_norm'],
                 self._training,
                 self._config['network_structure']['conv_propagate_inputs']
             )
@@ -205,7 +204,6 @@ class SC2Network:
                     non_spatial_flat,
                     self._config['network_structure']['value_network'],
                     self._config['network_structure']['activation'],
-                    self._config['network_structure']['use_batch_norm'],
                     self._training
                 )
                 value = tf.layers.dense(
@@ -221,7 +219,6 @@ class SC2Network:
                 non_spatial_flat,
                 self._config['network_structure']['shared_non_spatial_network'],
                 self._config['network_structure']['activation'],
-                self._config['network_structure']['use_batch_norm'],
                 self._training
             )
 
@@ -277,7 +274,6 @@ class SC2Network:
                             stream_input,
                             spec,
                             self._config['network_structure']['activation'],
-                            self._config['network_structure']['use_batch_norm'],
                             self._training
                         )
                         # for non-spatial components make a dense layer with width equal to number of possible actions
@@ -598,12 +594,10 @@ class SC2Network:
             lr = self._learning_rate
 
         # must run this op to do batch norm
-        if self._config['network_structure']['use_batch_norm']:
-            self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
         self._optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(final_loss)
-        if self._config['network_structure']['use_batch_norm']:
-            self._optimizer = tf.group([self._optimizer, self._update_ops])
+        self._optimizer = tf.group([self._optimizer, self._update_ops])
 
         # tensorboard summaries
         self._train_summaries = tf.summary.merge_all(scope='losses')
