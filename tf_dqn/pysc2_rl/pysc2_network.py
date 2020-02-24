@@ -154,8 +154,8 @@ class SC2Network:
 
             screen = tf.concat(to_concat, axis=-1, name='screen_input')
 
-        with tf.variable_scope('spatial_network'):
-            conv_spatial_num_filters, conv_spatial = self._get_conv_layers(screen, self._config['network_structure']['spatial_network'])
+        with tf.variable_scope('shared_spatial_network'):
+            shared_spatial_net = self._get_conv_layers(screen, self._config['network_structure']['shared_spatial_network'])
 
         with tf.variable_scope('spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
@@ -165,11 +165,11 @@ class SC2Network:
                 if using and name in spatial_components:
                     spatial_count += 1
             scale = 1 / spatial_count
-            conv_spatial = (1 - scale) * tf.stop_gradient(conv_spatial) + scale * conv_spatial
+            shared_spatial_net = (1 - scale) * tf.stop_gradient(shared_spatial_net) + scale * shared_spatial_net
 
         # spatial policy splits off before max pooling
         max_pool = tf.layers.max_pooling2d(
-            inputs=conv_spatial,
+            inputs=shared_spatial_net,
             pool_size=3,
             strides=3,
             padding='valid',
@@ -179,7 +179,7 @@ class SC2Network:
         # MUST flatten conv or pooling layers before sending to dense layer
         non_spatial_flat = tf.reshape(
             max_pool,
-            shape=[-1, int(self._config['env']['screen_size'] * self._config['env']['screen_size'] / 9 * conv_spatial_num_filters)],
+            shape=[-1, np.prod(max_pool.shape[1:])],
             name='non_spatial_flat'
         )
 
@@ -204,7 +204,7 @@ class SC2Network:
                     value = tf.layers.batch_normalization(value, training=self._training)
 
         with tf.variable_scope('shared_non_spatial_network'):
-            fc_non_spatial = self._get_dense_layers(non_spatial_flat, self._config['network_structure']['non_spatial_network'])
+            fc_non_spatial = self._get_dense_layers(non_spatial_flat, self._config['network_structure']['shared_non_spatial_network'])
 
         with tf.variable_scope('non_spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
@@ -228,7 +228,7 @@ class SC2Network:
                 with tf.variable_scope(c + '_branch'):
                     if c in spatial_components and not self._config['network_structure']['use_dense_layers_for_spatial']:
                         spatial_policy = tf.layers.conv2d(
-                            inputs=conv_spatial,
+                            inputs=shared_spatial_net,
                             filters=1,
                             kernel_size=1,
                             padding='same'
@@ -241,8 +241,8 @@ class SC2Network:
                             spec = self._config['network_structure']['component_stream_specs'][c]
                         if c in spatial_components:
                             stream_input = tf.reshape(
-                                conv_spatial,
-                                shape=[-1, self._config['env']['screen_size'] * self._config['env']['screen_size'] * conv_spatial_num_filters]
+                                shared_spatial_net,
+                                shape=[-1, np.prod(shared_spatial_net.shape[1:])]
                             )
                         else:
                             stream_input = fc_non_spatial
@@ -411,9 +411,7 @@ class SC2Network:
         # each dict gives the number of filters and kernel size of a conv layer
         original_layers = inputs
 
-        num_output_layers = 0
         for conv_unit in spec:
-            num_output_layers = 0
             conv_layers = []
             for conv in conv_unit:
                 conv_layer = tf.layers.conv2d(
@@ -426,12 +424,10 @@ class SC2Network:
                 if self._config['network_structure']['use_batch_norm']:
                     conv_layer = tf.layers.batch_normalization(conv_layer, training=self._training)
                 conv_layers.append(conv_layer)
-                num_output_layers += conv['filters']
             if self._config['network_structure']['conv_propagate_inputs']:
                 conv_layers.append(original_layers)
-                num_output_layers += original_layers.shape[-1]
             inputs = tf.concat(conv_layers, axis=-1)
-        return num_output_layers, inputs
+        return inputs
 
     def _get_dense_layers(self, inputs, spec):
         # expecting spec to be a list of ints
@@ -619,7 +615,8 @@ class SC2Network:
             self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
         self._optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(final_loss)
-        self._optimizer = tf.group([self._optimizer, self._update_ops])
+        if self._config['network_structure']['use_batch_norm']:
+            self._optimizer = tf.group([self._optimizer, self._update_ops])
 
         # tensorboard summaries
         self._train_summaries = tf.summary.merge_all(scope='losses')

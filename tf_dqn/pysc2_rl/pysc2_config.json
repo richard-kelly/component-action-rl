@@ -63,7 +63,7 @@
     "log_frequency": 200,
 
     "network_structure": {
-        "spatial_network": [
+        "shared_spatial_network": [
             [
                 {
                     "filters": 16,
@@ -78,7 +78,7 @@
             ]
         ],
         "value_network": [1024, 1024],
-        "non_spatial_network": [1024, 1024],
+        "shared_non_spatial_network": [1024, 1024],
         "component_stream_default": [],
         "component_stream_specs": {
             "function": []
