@@ -1,10 +1,20 @@
 import tensorflow as tf
 
 
-def get_conv_layers(inputs, spec, use_bn, is_training, propagate_inputs):
+def get_activation(activation_name):
+    if activation_name == 'relu':
+        return tf.nn.relu
+    if activation_name == 'leaky_relu':
+        return tf.nn.leaky_relu
+    else:
+        raise ValueError(activation_name + ' is not a valid type of activation.')
+
+
+def get_conv_layers(inputs, spec, activation, use_bn, is_training, propagate_inputs):
     # expecting spec to be a list of lists of dicts.
     # each inner list is a list of conv layers using the same input to be concatenated
     # each dict gives the number of filters and kernel size of a conv layer
+
     original_layers = inputs
 
     for conv_unit in spec:
@@ -15,7 +25,7 @@ def get_conv_layers(inputs, spec, use_bn, is_training, propagate_inputs):
                 filters=conv['filters'],
                 kernel_size=conv['kernel_size'],
                 padding='same',
-                activation=tf.nn.leaky_relu
+                activation=get_activation(activation)
             )
             if use_bn:
                 conv_layer = tf.layers.batch_normalization(conv_layer, training=is_training)
@@ -26,13 +36,13 @@ def get_conv_layers(inputs, spec, use_bn, is_training, propagate_inputs):
     return inputs
 
 
-def get_dense_layers(inputs, spec, use_bn, is_training):
+def get_dense_layers(inputs, spec, activation, use_bn, is_training):
     # expecting spec to be a list of ints
     for num_units in spec:
         dense = tf.layers.dense(
             inputs,
             units=num_units,
-            activation=tf.nn.leaky_relu,
+            activation=get_activation(activation),
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
         )
         if use_bn:

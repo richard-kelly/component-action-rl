@@ -90,7 +90,8 @@
             "screen": ["function"],
             "screen2": ["screen"]
         },
-        "use_batch_norm": true
+        "use_batch_norm": true,
+        "activation": "leaky_relu"
     },
 
     "env": {

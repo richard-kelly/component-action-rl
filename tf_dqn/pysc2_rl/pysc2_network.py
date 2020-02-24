@@ -160,6 +160,7 @@ class SC2Network:
             shared_spatial_net = network_utils.get_conv_layers(
                 screen,
                 self._config['network_structure']['shared_spatial_network'],
+                self._config['network_structure']['activation'],
                 self._config['network_structure']['use_batch_norm'],
                 self._training,
                 self._config['network_structure']['conv_propagate_inputs']
@@ -203,6 +204,7 @@ class SC2Network:
                 fc_value = network_utils.get_dense_layers(
                     non_spatial_flat,
                     self._config['network_structure']['value_network'],
+                    self._config['network_structure']['activation'],
                     self._config['network_structure']['use_batch_norm'],
                     self._training
                 )
@@ -218,6 +220,7 @@ class SC2Network:
             fc_non_spatial = network_utils.get_dense_layers(
                 non_spatial_flat,
                 self._config['network_structure']['shared_non_spatial_network'],
+                self._config['network_structure']['activation'],
                 self._config['network_structure']['use_batch_norm'],
                 self._training
             )
@@ -270,7 +273,13 @@ class SC2Network:
                                 for d in self._config['network_structure']['stream_dependencies'][c]:
                                     dependencies.append(action_one_hots[d])
                                 stream_input = tf.concat(dependencies, axis=-1)
-                        component_fc = network_utils.get_dense_layers(stream_input, spec, self._config['network_structure']['use_batch_norm'], self._training)
+                        component_fc = network_utils.get_dense_layers(
+                            stream_input,
+                            spec,
+                            self._config['network_structure']['activation'],
+                            self._config['network_structure']['use_batch_norm'],
+                            self._training
+                        )
                         # for non-spatial components make a dense layer with width equal to number of possible actions
                         component_streams[c] = tf.layers.dense(component_fc, num_options[c], name=c)
 
