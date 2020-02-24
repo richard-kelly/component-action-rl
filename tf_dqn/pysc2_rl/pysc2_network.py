@@ -2,6 +2,8 @@ import tensorflow as tf
 import numpy as np
 import math
 
+from tf_dqn.common import network_utils
+
 from pysc2.lib import actions as pysc2_actions
 from pysc2.lib import static_data as pysc2_static_data
 
@@ -155,7 +157,13 @@ class SC2Network:
             screen = tf.concat(to_concat, axis=-1, name='screen_input')
 
         with tf.variable_scope('shared_spatial_network'):
-            shared_spatial_net = self._get_conv_layers(screen, self._config['network_structure']['shared_spatial_network'])
+            shared_spatial_net = network_utils.get_conv_layers(
+                screen,
+                self._config['network_structure']['shared_spatial_network'],
+                self._config['network_structure']['use_batch_norm'],
+                self._training,
+                self._config['network_structure']['conv_propagate_inputs']
+            )
 
         with tf.variable_scope('spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
@@ -192,7 +200,12 @@ class SC2Network:
         # for dueling net, split here
         if self._config['dueling_network']:
             with tf.variable_scope('value_network'):
-                fc_value = self._get_dense_layers(non_spatial_flat, self._config['network_structure']['value_network'])
+                fc_value = network_utils.get_dense_layers(
+                    non_spatial_flat,
+                    self._config['network_structure']['value_network'],
+                    self._config['network_structure']['use_batch_norm'],
+                    self._training
+                )
                 value = tf.layers.dense(
                     fc_value,
                     1,
@@ -200,11 +213,14 @@ class SC2Network:
                     kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                     name='value'
                 )
-                if self._config['network_structure']['use_batch_norm']:
-                    value = tf.layers.batch_normalization(value, training=self._training)
 
         with tf.variable_scope('shared_non_spatial_network'):
-            fc_non_spatial = self._get_dense_layers(non_spatial_flat, self._config['network_structure']['shared_non_spatial_network'])
+            fc_non_spatial = network_utils.get_dense_layers(
+                non_spatial_flat,
+                self._config['network_structure']['shared_non_spatial_network'],
+                self._config['network_structure']['use_batch_norm'],
+                self._training
+            )
 
         with tf.variable_scope('non_spatial_gradient_scale'):
             # scale because multiple action component streams are meeting here
@@ -254,7 +270,7 @@ class SC2Network:
                                 for d in self._config['network_structure']['stream_dependencies'][c]:
                                     dependencies.append(action_one_hots[d])
                                 stream_input = tf.concat(dependencies, axis=-1)
-                        component_fc = self._get_dense_layers(stream_input, spec)
+                        component_fc = network_utils.get_dense_layers(stream_input, spec, self._config['network_structure']['use_batch_norm'], self._training)
                         # for non-spatial components make a dense layer with width equal to number of possible actions
                         component_streams[c] = tf.layers.dense(component_fc, num_options[c], name=c)
 
@@ -404,44 +420,6 @@ class SC2Network:
                 action_one_hot[name] = tf.one_hot(actions[name], num_options[name], 1.0, 0.0, name=name)
 
         return action_one_hot
-
-    def _get_conv_layers(self, inputs, spec):
-        # expecting spec to be a list of lists of dicts.
-        # each inner list is a list of conv layers using the same input to be concatenated
-        # each dict gives the number of filters and kernel size of a conv layer
-        original_layers = inputs
-
-        for conv_unit in spec:
-            conv_layers = []
-            for conv in conv_unit:
-                conv_layer = tf.layers.conv2d(
-                    inputs=inputs,
-                    filters=conv['filters'],
-                    kernel_size=conv['kernel_size'],
-                    padding='same',
-                    activation=tf.nn.leaky_relu
-                )
-                if self._config['network_structure']['use_batch_norm']:
-                    conv_layer = tf.layers.batch_normalization(conv_layer, training=self._training)
-                conv_layers.append(conv_layer)
-            if self._config['network_structure']['conv_propagate_inputs']:
-                conv_layers.append(original_layers)
-            inputs = tf.concat(conv_layers, axis=-1)
-        return inputs
-
-    def _get_dense_layers(self, inputs, spec):
-        # expecting spec to be a list of ints
-        for num_units in spec:
-            dense = tf.layers.dense(
-                inputs,
-                units=num_units,
-                activation=tf.nn.leaky_relu,
-                kernel_initializer=tf.variance_scaling_initializer(scale=2.0)
-            )
-            if self._config['network_structure']['use_batch_norm']:
-                dense = tf.layers.batch_normalization(dense, training=self._training)
-            inputs = dense
-        return inputs
 
     def _define_model(self):
         # placeholders for (s, a, s', r, terminal)
