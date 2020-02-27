@@ -160,7 +160,7 @@ class SC2Network:
             shared_spatial_net = network_utils.get_layers(
                 screen,
                 self._config['network_structure']['shared_spatial_network'],
-                self._config['network_structure']['activation'],
+                self._config['network_structure']['default_activation'],
                 self._training
             )
 
@@ -187,7 +187,7 @@ class SC2Network:
                 fc_value = network_utils.get_layers(
                     shared_spatial_net,
                     self._config['network_structure']['value_network'],
-                    self._config['network_structure']['activation'],
+                    self._config['network_structure']['default_activation'],
                     self._training
                 )
                 value = tf.layers.dense(
@@ -199,10 +199,10 @@ class SC2Network:
                 )
 
         with tf.variable_scope('shared_non_spatial_network'):
-            fc_non_spatial = network_utils.get_layers(
+            shared_non_spatial = network_utils.get_layers(
                 shared_spatial_net,
                 self._config['network_structure']['shared_non_spatial_network'],
-                self._config['network_structure']['activation'],
+                self._config['network_structure']['default_activation'],
                 self._training
             )
 
@@ -214,54 +214,51 @@ class SC2Network:
                     if using and name not in spatial_components:
                         non_spatial_count += 1
                 scale = 1 / non_spatial_count
-                fc_non_spatial = (1 - scale) * tf.stop_gradient(fc_non_spatial) + scale * fc_non_spatial
+                shared_non_spatial = (1 - scale) * tf.stop_gradient(shared_non_spatial) + scale * shared_non_spatial
 
         num_options = self._get_num_options_per_function()
 
         # create each component stream
         component_streams = {}
+        # final q vals with value added
         action_q_vals = {}
-        action_one_hots = {}
+        # if another stream requires the output of another stream
+        component_one_hots_or_embeddings = {}
         for c in component_order:
             # are we using this component?
             if self._action_components[c]:
-                with tf.variable_scope(c + '_branch'):
-                    if c in spatial_components and not self._config['network_structure']['use_dense_layers_for_spatial']:
-                        spatial_policy = tf.layers.conv2d(
-                            inputs=shared_spatial_net,
-                            filters=1,
-                            kernel_size=1,
-                            padding='same'
-                        )
-                        component_streams[c] = tf.reshape(spatial_policy, [-1, num_options[c]], name=c)
-                    else:
-                        # optionally one stream of fully connected layers per component
-                        spec = self._config['network_structure']['component_stream_default']
-                        if c in self._config['network_structure']['component_stream_specs']:
-                            spec = self._config['network_structure']['component_stream_specs'][c]
-                        if c in spatial_components:
-                            stream_input = tf.reshape(
-                                shared_spatial_net,
-                                shape=[-1, np.prod(shared_spatial_net.shape[1:])]
-                            )
-                        else:
-                            stream_input = fc_non_spatial
+                with tf.variable_scope(c + '_stream'):
+                    stream_input = shared_non_spatial
+                    if c in spatial_components:
+                        stream_input = shared_spatial_net
 
-                        # optionally feed one hot versions of earlier stream outputs to this stream
-                        if self._config['network_structure']['use_stream_outputs_as_inputs_to_other_streams']:
-                            if c in self._config['network_structure']['stream_dependencies']:
-                                dependencies = [stream_input]
-                                for d in self._config['network_structure']['stream_dependencies'][c]:
-                                    dependencies.append(action_one_hots[d])
-                                stream_input = tf.concat(dependencies, axis=-1)
-                        component_fc = network_utils.get_dense_layers(
-                            stream_input,
-                            spec,
-                            self._config['network_structure']['activation'],
-                            self._training
-                        )
-                        # for non-spatial components make a dense layer with width equal to number of possible actions
-                        component_streams[c] = tf.layers.dense(component_fc, num_options[c], name=c)
+                    # optionally one stream of fully connected layers per component
+                    spec = self._config['network_structure']['component_stream_default']
+                    if c in self._config['network_structure']['component_stream_specs']:
+                        spec = self._config['network_structure']['component_stream_specs'][c]
+
+                    # optionally feed one hot OR embedded versions of earlier stream outputs to this stream
+                    dependencies = None
+                    if self._config['network_structure']['use_stream_outputs_as_inputs_to_other_streams']:
+                        if c in self._config['network_structure']['stream_dependencies']:
+                            dependencies = []
+                            for d in self._config['network_structure']['stream_dependencies'][c]:
+                                dependencies.append(component_one_hots_or_embeddings[d])
+
+                    component_stream = network_utils.get_layers(
+                        stream_input,
+                        spec,
+                        self._config['network_structure']['default_activation'],
+                        self._training,
+                        dependencies
+                    )
+
+                    if c not in spatial_components or self._config['network_structure']['end_spatial_streams_with_dense_instead_of_flatten']:
+                        # make a dense layer with width equal to number of possible actions
+                        component_streams[c] = tf.layers.dense(component_stream, num_options[c], name=c)
+                    else:
+                        # flatten a conv output
+                        component_streams[c] = tf.reshape(component_stream, [-1, num_options[c]], name=c)
 
                 if self._config['dueling_network']:
                     # action_q_vals is A(s,a), value is V(s)
@@ -289,9 +286,15 @@ class SC2Network:
                                 break
                         if found_dependency:
                             action_index = tf.math.argmax(action_q_vals[c], axis=-1)
-                            action_one_hot = tf.one_hot(action_index, num_options[c])
-                            # argmax should be non-differentiable but just to remind myself use stop_gradient
-                            action_one_hots[c] = tf.stop_gradient(action_one_hot)
+                            if num_options[c] <= 10:
+                                action_one_hot = tf.one_hot(action_index, num_options[c])
+                                # argmax should be non-differentiable but just to remind myself use stop_gradient
+                                component_one_hots_or_embeddings[c] = tf.stop_gradient(action_one_hot)
+                            else:
+                                component_one_hots_or_embeddings[c] = tf.keras.layers.Embedding(
+                                    input_dim=num_options[c],
+                                    output_dim=math.ceil(num_options[c] ** (1 / 4.0))
+                                )(action_index)
 
         # return action_q_vals
         return action_q_vals

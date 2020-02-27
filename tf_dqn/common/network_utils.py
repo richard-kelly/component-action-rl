@@ -48,12 +48,13 @@ def res_block_preactivation(inputs, filters, kernel, is_training, activation='re
     return conv + inputs
 
 
-def get_layers(inputs, spec, activation, is_training):
+def get_layers(inputs, spec, activation, is_training, extra_inputs=None):
     # spec is a list, with various types as valid elements:
     #   'bn'                 - batch norm
     #   'relu'               - ReLU
     #   'leaky_relu'         - Leaky ReLU
     #   'flatten'            - reshapes to 2d, first dimension is batch size
+    #   'concat_extra'       - concats on last dimension with tensors in extra_inputs list
     #   int                  - dense layer with 'int' units, then default activation, then bn
     #   []                   - recursive call to get_layers() for each in list, then concatenate all outputs on last dim
     #   {type: 'something'}  - various, depends on type (other parameters as indicated)
@@ -63,6 +64,9 @@ def get_layers(inputs, spec, activation, is_training):
     #       resblock         - filters, kernel_size, count, downsample [optional], original [optional]
     #       conv_act_bn      - filters, kernel_size, stride [optional]
     #       conv             - filters, kernel_size, stride [optional]
+    #
+    # activation is the default activation function
+    # extra_inputs is a list of tensors to be concatenated with the network using concat_extra type
 
     for part in spec:
         if type(part) is str:
@@ -77,6 +81,8 @@ def get_layers(inputs, spec, activation, is_training):
                 inputs = act(inputs)
             elif func == 'flatten':
                 inputs = tf.reshape(inputs, shape=[-1, np.prod(inputs.shape[1:])])
+            elif func == 'concat_extra' and extra_inputs is not None:
+                inputs = tf.concat([inputs] + extra_inputs, axis=-1)
             else:
                 raise ValueError(part + ' is not a valid type of network part.')
         elif type(part) is int:

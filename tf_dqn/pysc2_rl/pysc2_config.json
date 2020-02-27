@@ -82,15 +82,17 @@
         ],
         "component_stream_default": [],
         "component_stream_specs": {
-            "function": []
+            "function": [],
+            "screen": [{"type": "conv", "filters": 1, "kernel_size": 1}],
+            "screen2": [{"type": "conv", "filters": 1, "kernel_size": 1}]
         },
-        "use_dense_layers_for_spatial": false,
+        "end_spatial_streams_with_dense_instead_of_flatten": false,
         "use_stream_outputs_as_inputs_to_other_streams": false,
         "stream_dependencies": {
             "screen": ["function"],
             "screen2": ["screen"]
         },
-        "activation": "relu",
+        "default_activation": "relu",
         "scale_gradients_at_shared_spatial_split": true,
         "scale_gradients_at_shared_non_spatial_split": true
     },
