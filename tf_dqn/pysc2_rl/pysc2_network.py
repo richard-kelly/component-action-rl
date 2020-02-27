@@ -157,51 +157,35 @@ class SC2Network:
             screen = tf.concat(to_concat, axis=-1, name='screen_input')
 
         with tf.variable_scope('shared_spatial_network'):
-            shared_spatial_net = network_utils.get_conv_layers(
+            shared_spatial_net = network_utils.get_layers(
                 screen,
                 self._config['network_structure']['shared_spatial_network'],
                 self._config['network_structure']['activation'],
-                self._training,
-                self._config['network_structure']['conv_propagate_inputs']
+                self._training
             )
 
-        with tf.variable_scope('spatial_gradient_scale'):
-            # scale because multiple action component streams are meeting here
-            # (always one more branch than number of spatial components)
-            spatial_count = 1
-            for name, using in self._action_components.items():
-                if using and name in spatial_components:
-                    spatial_count += 1
-            scale = 1 / spatial_count
-            shared_spatial_net = (1 - scale) * tf.stop_gradient(shared_spatial_net) + scale * shared_spatial_net
-
-        # spatial policy splits off before max pooling
-        max_pool = tf.layers.max_pooling2d(
-            inputs=shared_spatial_net,
-            pool_size=3,
-            strides=3,
-            padding='valid',
-            name='max_pool'
-        )
-
-        # MUST flatten conv or pooling layers before sending to dense layer
-        non_spatial_flat = tf.reshape(
-            max_pool,
-            shape=[-1, np.prod(max_pool.shape[1:])],
-            name='non_spatial_flat'
-        )
+        if self._config['network_structure']['scale_gradients_at_shared_spatial_split']:
+            with tf.variable_scope('spatial_gradient_scale'):
+                # scale because multiple action component streams are meeting here
+                # (always one more branch than number of spatial components)
+                spatial_count = 1
+                for name, using in self._action_components.items():
+                    if using and name in spatial_components:
+                        spatial_count += 1
+                scale = 1 / spatial_count
+                shared_spatial_net = (1 - scale) * tf.stop_gradient(shared_spatial_net) + scale * shared_spatial_net
 
         if self._config['dueling_network']:
             with tf.variable_scope('dueling_gradient_scale'):
                 # scale the gradients entering last shared layer, as in original Dueling DQN paper
                 scale = 1 / math.sqrt(2)
-                non_spatial_flat = (1 - scale) * tf.stop_gradient(non_spatial_flat) + scale * non_spatial_flat
+                shared_spatial_net = (1 - scale) * tf.stop_gradient(shared_spatial_net) + scale * shared_spatial_net
 
         # for dueling net, split here
         if self._config['dueling_network']:
             with tf.variable_scope('value_network'):
-                fc_value = network_utils.get_dense_layers(
-                    non_spatial_flat,
+                fc_value = network_utils.get_layers(
+                    shared_spatial_net,
                     self._config['network_structure']['value_network'],
                     self._config['network_structure']['activation'],
                     self._training
@@ -215,22 +199,22 @@ class SC2Network:
                 )
 
         with tf.variable_scope('shared_non_spatial_network'):
-            fc_non_spatial = network_utils.get_dense_layers(
-                non_spatial_flat,
+            fc_non_spatial = network_utils.get_layers(
+                shared_spatial_net,
                 self._config['network_structure']['shared_non_spatial_network'],
                 self._config['network_structure']['activation'],
                 self._training
             )
 
-        with tf.variable_scope('non_spatial_gradient_scale'):
-            # scale because multiple action component streams are meeting here
-            non_spatial_count = 0
-            for name, using in self._action_components.items():
-                if using and name not in spatial_components:
-                    non_spatial_count += 1
-            scale = 1 / non_spatial_count
-
-            fc_non_spatial = (1 - scale) * tf.stop_gradient(fc_non_spatial) + scale * fc_non_spatial
+        if self._config['network_structure']['scale_gradients_at_shared_non_spatial_split']:
+            with tf.variable_scope('non_spatial_gradient_scale'):
+                # scale because multiple action component streams are meeting here
+                non_spatial_count = 0
+                for name, using in self._action_components.items():
+                    if using and name not in spatial_components:
+                        non_spatial_count += 1
+                scale = 1 / non_spatial_count
+                fc_non_spatial = (1 - scale) * tf.stop_gradient(fc_non_spatial) + scale * fc_non_spatial
 
         num_options = self._get_num_options_per_function()
 
