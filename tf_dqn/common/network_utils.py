@@ -82,7 +82,9 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
                 inputs = act(inputs)
             elif func == 'flatten':
                 inputs = tf.reshape(inputs, shape=[-1, np.prod(inputs.shape[1:])])
-            elif func == 'concat_extra' and extra_inputs is not None:
+            elif func == 'concat_extra':
+                if extra_inputs is None:
+                    raise ValueError('Trying to concat extra input but there is none in', spec)
                 inputs = tf.concat([inputs] + extra_inputs, axis=-1)
             else:
                 raise ValueError(part + ' is not a valid type of network part in', spec)
