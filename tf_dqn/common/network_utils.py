@@ -48,7 +48,7 @@ def res_block_preactivation(inputs, filters, kernel, is_training, activation='re
     return conv + inputs
 
 
-def get_layers(inputs, spec, activation, is_training, extra_inputs=None):
+def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
     # spec is a list, with various types as valid elements:
     #   'bn'                 - batch norm
     #   'relu'               - ReLU
@@ -68,7 +68,8 @@ def get_layers(inputs, spec, activation, is_training, extra_inputs=None):
     # activation is the default activation function
     # extra_inputs is a list of tensors to be concatenated with the network using concat_extra type
 
-    for part in spec:
+    # helper function mainly so that the [] concat function is easy to specify in the config
+    def get_layers_from_part(inputs, part):
         if type(part) is str:
             func = part.lower()
             if func == 'bn':
@@ -84,7 +85,7 @@ def get_layers(inputs, spec, activation, is_training, extra_inputs=None):
             elif func == 'concat_extra' and extra_inputs is not None:
                 inputs = tf.concat([inputs] + extra_inputs, axis=-1)
             else:
-                raise ValueError(part + ' is not a valid type of network part.')
+                raise ValueError(part + ' is not a valid type of network part in', spec)
         elif type(part) is int:
             inputs = tf.layers.dense(
                 inputs,
@@ -96,7 +97,7 @@ def get_layers(inputs, spec, activation, is_training, extra_inputs=None):
         elif type(part) is list:
             branches = []
             for sub_part in part:
-                branches.append(get_layers(inputs, sub_part, activation, is_training))
+                branches.append(get_layers_from_part(inputs, sub_part))
             inputs = tf.concat(branches, axis=-1)
         elif type(part) is dict:
             func = part['type']
@@ -153,8 +154,12 @@ def get_layers(inputs, spec, activation, is_training, extra_inputs=None):
                 raise ValueError(func + ' is not a valid type of network part.')
         else:
             raise ValueError(type(part) + ' is not a valid type of network part.')
+        return inputs
 
-    return inputs
+    for part in spec:
+        input_layer = get_layers_from_part(input_layer, part)
+
+    return input_layer
 
 
 def get_conv_layers(inputs, spec, activation, is_training):
