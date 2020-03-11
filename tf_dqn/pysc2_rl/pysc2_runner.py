@@ -33,6 +33,17 @@ num_eps_summary_last = 20
 experiments_summary_file = None
 
 
+def get_paths_of_models_in_dir(dir):
+    paths = []
+    if os.path.isdir(dir):
+        for file in os.listdir(dir):
+            path_to_file = os.path.join(dir, file)
+            if os.path.isdir(path_to_file):
+                paths += get_paths_of_models_in_dir(path_to_file)
+            elif file == 'checkpoint':
+                paths.append(dir)
+    return paths
+
 def write_summary_file_header(file_path, run_variables=None):
     with open(file_path, 'a+') as f:
         params = []
@@ -499,15 +510,17 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
     # print out some results of the run if we are doing inference only not in realtime
     if config['inference_only'] and not config['inference_only_realtime']:
         print('Inference_only summary for', config['model_dir'] + ':')
-        print('Num episodes:', episode)
-        print('Win rate:', win_count / episode)
-        print('Average score:', sum(all_ep_scores) / episode)
+        print('Num episodes:', episode - 1)
+        print('Win rate:', win_count / (episode - 1))
+        print('Average score:', sum(all_ep_scores) / (episode - 1))
         print('Max score:', max_ep_score)
 
 
 def main():
     # load configuration
     config_paths = ['pysc2_config.json']
+    eval_dir_mode = False
+    write_experiment_summary = False
     if len(sys.argv) > 1:
         if os.path.isdir(sys.argv[1]):
             # if arg is a dir, we have a dir of config files to be run
@@ -515,6 +528,12 @@ def main():
             config_paths = []
             for file in config_files:
                 config_paths.append(os.path.join(sys.argv[1], file))
+            if len(config_files) > 1:
+                write_experiment_summary = True
+        elif sys.argv[1] == 'eval_dir':
+            # run eval inference only on each model inside the root model dir of the config file
+            eval_dir_mode = True
+            write_experiment_summary = True
         else:
             # if it's a file, we just want that file
             config_paths = [sys.argv[1]]
@@ -522,6 +541,12 @@ def main():
     # use one config as a 'base' to allow other configs to be smaller
     with open('pysc2_config.json', 'r') as fp:
         base_config = json.load(fp=fp)
+
+    if write_experiment_summary:
+        global experiments_summary_file
+        experiments_summary_file = base_config['model_dir'] + '/experiments_summary.csv'
+        os.makedirs(base_config['model_dir'], exist_ok=True)
+        write_summary_file_header(experiments_summary_file)
 
     # bypass everything else if we are doing inference only
     always_use_from_base_config = [
@@ -531,24 +556,42 @@ def main():
         'inference_only_episodes'
     ]
     if base_config['inference_only']:
-        with open(base_config['model_dir'] + '/config.json', 'r') as fp:
-            config = json.load(fp=fp)
-        for option in always_use_from_base_config:
-            config[option] = base_config[option]
+        if not eval_dir_mode:
+            with open(base_config['model_dir'] + '/config.json', 'r') as fp:
+                config = json.load(fp=fp)
+            for option in always_use_from_base_config:
+                config[option] = base_config[option]
 
-        # in inference only mode we don't care about training stop times
-        config['max_steps'] = 0
-        config['max_episodes'] = 0
-        if config['inference_only_episodes'] > 0:
-            config['max_episodes'] = config['inference_only_episodes']
-        run_one_env(config, rename_if_duplicate=False)
-        exit(0)
+            # in inference only mode we don't care about training stop times
+            config['max_steps'] = 0
+            config['max_episodes'] = 0
+            if config['inference_only_episodes'] > 0:
+                config['max_episodes'] = config['inference_only_episodes']
+            run_one_env(config, rename_if_duplicate=False)
+            exit(0)
+        else:
+            model_paths = get_paths_of_models_in_dir(base_config['model_dir'])
+            for model_dir in model_paths:
+                with open(os.path.join(model_dir, 'config.json'), 'r') as fp:
+                    config = json.load(fp=fp)
 
-    if len(config_paths) > 1:
-        global experiments_summary_file
-        experiments_summary_file = base_config['model_dir'] + '/batch_summary.csv'
-        os.makedirs(base_config['model_dir'], exist_ok=True)
-        write_summary_file_header(experiments_summary_file)
+                # in inference only mode we don't care about training stop times
+                config['max_steps'] = 0
+                config['max_episodes'] = 0
+                for option in always_use_from_base_config:
+                    config[option] = base_config[option]
+                if config['inference_only_episodes'] > 0:
+                    config['max_episodes'] = config['inference_only_episodes']
+
+                config = process_config_env(config)
+
+                # load batch config file
+
+                # some things need to be adjusted after the batch variables are altered
+                config = process_config_post_batch(config)
+                print('****** Starting eval of:', config['model_dir'], '******')
+                run_one_env(config, 0, {}, rename_if_duplicate=False, output_file=None)
+            exit(0)
 
     for config_file in config_paths:
         with open(config_file, 'r') as fp:
