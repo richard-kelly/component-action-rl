@@ -29,6 +29,58 @@ from tf_dqn.pysc2_rl.maps import CombatMaps
 FLAGS = flags.FLAGS
 FLAGS(sys.argv)
 
+num_eps_summary_last = 20
+experiments_summary_file = None
+
+
+def write_summary_file_header(file_path, run_variables=None):
+    with open(file_path, 'a+') as f:
+        params = []
+        if run_variables is not None:
+            for name in run_variables:
+                params.append(name)
+        run_info = ['Run_Name', 'Run_num'] + params + ['Steps', "Episodes"]
+        score_info = ['Max_Score', 'Avg_Score', 'Last_' + str(num_eps_summary_last) + '_Score']
+        win_info = ['Avg_Win_Val', 'Last_' + str(num_eps_summary_last) + '_Win_Val', 'Wins', 'Win_%']
+        header_row = run_info + score_info + win_info
+        f.write(','.join(str(val) for val in header_row) + '\n')
+
+
+def write_summary_file_line(file_path,
+                            last_n_ep_score,
+                            all_ep_scores,
+                            last_n_ep_wins,
+                            all_ep_wins,
+                            config,
+                            run_num,
+                            step,
+                            episode,
+                            max_ep_score,
+                            win_count,
+                            run_variables=None
+                            ):
+    with open(file_path, 'a+') as f:
+        avg_last = sum(last_n_ep_score) / len(last_n_ep_score)
+        avg = sum(all_ep_scores) / len(all_ep_scores)
+        avg_win_last = sum(last_n_ep_wins) / len(last_n_ep_wins)
+        avg_wins = sum(all_ep_wins) / len(all_ep_wins)
+        run_var_vals = []
+        columns = [config['model_dir'], run_num]
+        if run_variables is not None:
+            for _, val in run_variables.items():
+                run_var_vals.append('{:.2e}'.format(val))
+        columns += run_var_vals
+        columns.append(step - 1)
+        columns.append(episode - 1)
+        columns.append(max_ep_score)
+        columns.append(avg)
+        columns.append(avg_last)
+        columns.append(avg_wins)
+        columns.append(avg_win_last)
+        columns.append(win_count)
+        columns.append(win_count / (episode - 1))
+        f.write(','.join(str(val) for val in columns) + '\n')
+
 
 def get_win_loss(obs):
     # if we're not using any food, then we don't have any units (and have lost)
@@ -130,10 +182,10 @@ def compute_action_list(rules):
 
 
 def process_config_post_batch(config):
-    # some values can be overridden to be based on number of steps
-    if config['match_per_beta_anneal_steps_to_max']:
+    # some values can be overridden to be based on number of steps (but not if number of steps is unset)
+    if config['match_per_beta_anneal_steps_to_max'] and config['max_steps'] > 0:
         config['per_beta_anneal_steps'] = int(config['max_steps'] * config['match_per_beta_anneal_steps_ratio'])
-    if config['match_epsilon_decay_steps_to_max']:
+    if config['match_epsilon_decay_steps_to_max'] and config['max_steps'] > 0:
         config['decay_steps'] = int(config['max_steps'] * config['match_epsilon_decay_steps_ratio'])
 
     return config
@@ -269,7 +321,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         config['model_dir'] = config['model_dir'] + '_' + time
 
     if not restore:
-        os.makedirs(config['model_dir'])
+        os.makedirs(config['model_dir'], exist_ok=True)
         with open(config['model_dir'] + '/config.json', 'w+') as fp:
             fp.write(json.dumps(config, indent=4))
 
@@ -278,7 +330,6 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         restore = True
 
     # variables for episode stats
-    num_eps = 20
     max_ep_score = None
     all_ep_scores = []
     last_n_ep_score = []
@@ -290,15 +341,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
     actions_used = {}
 
     if output_file is not None and not os.path.isfile(output_file):
-        with open(output_file, 'a+') as f:
-            params = []
-            for name in run_variables:
-                params.append(name)
-            run_info = ['Run_Name', 'Run_num'] + params
-            score_info = ['Max_Score', 'Avg_Score', 'Last_' + str(num_eps) + '_Score']
-            win_info = ['Avg_Win_Val', 'Last_' + str(num_eps) + '_Win_Val', 'Win_%']
-            header_row = run_info + score_info + win_info
-            f.write(','.join(str(val) for val in header_row) + '\n')
+        write_summary_file_header(output_file, run_variables)
 
     with sc2_env.SC2Env(
         map_name=config['env']['map_name'],
@@ -356,7 +399,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
 
                     # don't add to run stats if doing an eval episode and not training
                     if not eval_episode or config['train_on_eval_episodes']:
-                        if len(last_n_ep_score) == num_eps:
+                        if len(last_n_ep_score) == num_eps_summary_last:
                             last_n_ep_score.pop(0)
                             last_n_ep_wins.pop(0)
                         last_n_ep_score.append(episode_reward)
@@ -403,23 +446,35 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
 
     # write out run stats to output file if doing a batch
     if output_file is not None:
-        with open(output_file, 'a+') as f:
-            avg_last = sum(last_n_ep_score) / len(last_n_ep_score)
-            avg = sum(all_ep_scores) / len(all_ep_scores)
-            avg_win_last = sum(last_n_ep_wins) / len(last_n_ep_wins)
-            avg_wins = sum(all_ep_wins) / len(all_ep_wins)
-            run_var_vals = []
-            for _, val in run_variables.items():
-                run_var_vals.append('{:.2e}'.format(val))
-            columns = [config['model_dir'], run_num]
-            columns += run_var_vals
-            columns.append(max_ep_score)
-            columns.append(avg)
-            columns.append(avg_last)
-            columns.append(avg_wins)
-            columns.append(avg_win_last)
-            columns.append(win_count / episode)
-            f.write(','.join(str(val) for val in columns) + '\n')
+        write_summary_file_line(
+            output_file,
+            last_n_ep_score,
+            all_ep_scores,
+            last_n_ep_wins,
+            all_ep_wins,
+            config,
+            run_num,
+            step,
+            episode,
+            max_ep_score,
+            win_count,
+            run_variables
+        )
+
+    if experiments_summary_file is not None:
+        write_summary_file_line(
+            experiments_summary_file,
+            last_n_ep_score,
+            all_ep_scores,
+            last_n_ep_wins,
+            all_ep_wins,
+            config,
+            run_num,
+            step,
+            episode,
+            max_ep_score,
+            win_count
+        )
 
     # write out the stats of which actions were used to a file if training
     if not config['inference_only']:
@@ -488,6 +543,12 @@ def main():
             config['max_episodes'] = config['inference_only_episodes']
         run_one_env(config, rename_if_duplicate=False)
         exit(0)
+
+    if len(config_paths) > 1:
+        global experiments_summary_file
+        experiments_summary_file = base_config['model_dir'] + '/batch_summary.csv'
+        os.makedirs(base_config['model_dir'], exist_ok=True)
+        write_summary_file_header(experiments_summary_file)
 
     for config_file in config_paths:
         with open(config_file, 'r') as fp:
