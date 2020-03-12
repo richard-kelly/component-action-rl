@@ -556,7 +556,7 @@ def main():
         'inference_only_episodes'
     ]
     if base_config['inference_only']:
-        if not eval_dir_mode:
+        if not eval_dir_mode and len(sys.argv) == 1:
             with open(base_config['model_dir'] + '/config.json', 'r') as fp:
                 config = json.load(fp=fp)
             for option in always_use_from_base_config:
@@ -569,7 +569,52 @@ def main():
                 config['max_episodes'] = config['inference_only_episodes']
             run_one_env(config, rename_if_duplicate=False)
             exit(0)
+        elif not eval_dir_mode:
+            # inference only experiment run, must be using a pre-existing model as its model_dir
+            for config_file in config_paths:
+                with open(config_file, 'r') as fp:
+                    new_config = json.load(fp=fp)
+
+                if 'copy_model_from' in new_config and new_config['copy_model_from'] != '':
+                    with open(new_config['copy_model_from'] + '/config.json', 'r') as fp:
+                        model_config = json.load(fp=fp)
+                elif 'model_dir' in new_config:
+                    with open(new_config['model_dir'] + '/config.json', 'r') as fp:
+                        model_config = json.load(fp=fp)
+                else:
+                    model_config = base_config
+
+                found_model_name = False
+                for prop in new_config:
+                    if prop == 'model_dir':
+                        found_model_name = True
+                    if type(prop) is dict:
+                        # instead of making this a recursive function, this should be fine for now
+                        for sub_prop in new_config[prop]:
+                            model_config[prop][sub_prop] = new_config[prop][sub_prop]
+                    else:
+                        model_config[prop] = new_config[prop]
+
+                if not found_model_name:
+                    # want to append to model name just the name of the config file without .json and without path to its folder
+                    config_name = ''
+                    for part in os.path.basename(os.path.normpath(config_file)).split('.')[:-1]:
+                        config_name += part
+                    model_config['model_dir'] = model_config['model_dir'] + '/' + config_name
+
+                # in inference only mode we don't care about training stop times
+                model_config['max_steps'] = 0
+                model_config['max_episodes'] = 0
+                for option in always_use_from_base_config:
+                    model_config[option] = base_config[option]
+                if model_config['inference_only_episodes'] > 0:
+                    model_config['max_episodes'] = model_config['inference_only_episodes']
+
+                model_config = process_config_env(model_config)
+                print('****** Starting eval of:', config['model_dir'], '******')
+                run_one_env(model_config, 0, {}, rename_if_duplicate=True, output_file=None)
         else:
+            # eval mode
             model_paths = get_paths_of_models_in_dir(base_config['model_dir'])
             for model_dir in model_paths:
                 with open(os.path.join(model_dir, 'config.json'), 'r') as fp:
