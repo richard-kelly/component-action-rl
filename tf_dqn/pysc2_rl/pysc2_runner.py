@@ -611,7 +611,7 @@ def main():
                     model_config['max_episodes'] = model_config['inference_only_episodes']
 
                 model_config = process_config_env(model_config)
-                print('****** Starting eval of:', config['model_dir'], '******')
+                print('****** Starting eval of:', model_config['model_dir'], '******')
                 run_one_env(model_config, 0, {}, rename_if_duplicate=True, output_file=None)
         else:
             # eval mode
