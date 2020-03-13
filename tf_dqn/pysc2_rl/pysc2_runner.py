@@ -568,7 +568,6 @@ def main():
             if config['inference_only_episodes'] > 0:
                 config['max_episodes'] = config['inference_only_episodes']
             run_one_env(config, rename_if_duplicate=False)
-            exit(0)
         elif not eval_dir_mode:
             # inference only experiment run, must be using a pre-existing model as its model_dir
             for config_file in config_paths:
@@ -636,7 +635,7 @@ def main():
                 config = process_config_post_batch(config)
                 print('****** Starting eval of:', config['model_dir'], '******')
                 run_one_env(config, 0, {}, rename_if_duplicate=False, output_file=None)
-            exit(0)
+        exit(0)
 
     for config_file in config_paths:
         with open(config_file, 'r') as fp:
