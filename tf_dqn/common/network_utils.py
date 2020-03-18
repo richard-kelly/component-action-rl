@@ -85,7 +85,19 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
             elif func == 'concat_extra':
                 if extra_inputs is None:
                     raise ValueError('Trying to concat extra input but there is none in', spec)
-                inputs = tf.concat([inputs] + extra_inputs, axis=-1)
+                # add extra input (output from another stream) differently based on whether inputs is dense or conv
+                if len(inputs.shape) == 2:
+                    # dense
+                    inputs = tf.concat([inputs] + extra_inputs, axis=-1)
+                else:
+                    # conv - project each element of extra_elements to an entire depth layer
+                    new_filter_layers = []
+                    for extra_input in extra_inputs:
+                        for i in range(extra_input.shape[1]):
+                            # first part is just getting something of the right shape, then we add the correct value to the whole layer
+                            new_layer = inputs[:, :, :, 0] * 0 + tf.expand_dims(tf.expand_dims(extra_input[:, i], -1), -1)
+                            new_filter_layers.append(tf.expand_dims(new_layer, axis=-1))
+                    inputs = tf.concat([inputs] + new_filter_layers, axis=-1)
             else:
                 raise ValueError(part + ' is not a valid type of network part in', spec)
         elif type(part) is int:
