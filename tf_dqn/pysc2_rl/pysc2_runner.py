@@ -557,6 +557,7 @@ def main():
     ]
     if base_config['inference_only']:
         if not eval_dir_mode and len(sys.argv) == 1:
+            # normal inference mode
             with open(base_config['model_dir'] + '/config.json', 'r') as fp:
                 config = json.load(fp=fp)
             for option in always_use_from_base_config:
@@ -567,6 +568,7 @@ def main():
             config['max_episodes'] = 0
             if config['inference_only_episodes'] > 0:
                 config['max_episodes'] = config['inference_only_episodes']
+            config = process_config_env(config)
             run_one_env(config, rename_if_duplicate=False)
         elif not eval_dir_mode:
             # inference only experiment run, must be using a pre-existing model as its model_dir
@@ -628,11 +630,6 @@ def main():
                     config['max_episodes'] = config['inference_only_episodes']
 
                 config = process_config_env(config)
-
-                # load batch config file
-
-                # some things need to be adjusted after the batch variables are altered
-                config = process_config_post_batch(config)
                 print('****** Starting eval of:', config['model_dir'], '******')
                 run_one_env(config, 0, {}, rename_if_duplicate=False, output_file=None)
         exit(0)
@@ -708,6 +705,7 @@ def main():
                 print('****** Starting a new run in this batch: ' + name + ' ******')
                 run_one_env(config, count, run_variables, rename_if_duplicate=True, output_file=summary_file_name)
         else:
+            config = process_config_post_batch(config)
             run_one_env(config, rename_if_duplicate=False)
 
 
