@@ -523,6 +523,7 @@ def main():
     write_experiment_summary = False
     if len(sys.argv) > 1:
         if os.path.isdir(sys.argv[1]):
+            print('EXPERIMENT RUN ON DIR OF CONFIG FILES')
             # if arg is a dir, we have a dir of config files to be run
             config_files = os.listdir(sys.argv[1])
             config_paths = []
@@ -535,6 +536,7 @@ def main():
             eval_dir_mode = True
             write_experiment_summary = True
         else:
+            print('CUSTOM CONFIG FILE PATH')
             # if it's a file, we just want that file
             config_paths = [sys.argv[1]]
 
@@ -544,7 +546,8 @@ def main():
 
     if write_experiment_summary:
         global experiments_summary_file
-        experiments_summary_file = base_config['model_dir'] + '/experiments_summary.csv'
+        file_name = 'eval_summary.csv' if eval_dir_mode else 'experiments_summary.csv'
+        experiments_summary_file = base_config['model_dir'] + '/' + file_name
         os.makedirs(base_config['model_dir'], exist_ok=True)
         write_summary_file_header(experiments_summary_file)
 
@@ -557,6 +560,7 @@ def main():
     ]
     if base_config['inference_only']:
         if not eval_dir_mode and len(sys.argv) == 1:
+            print('INFERENCE ONLY MODE')
             # normal inference mode
             with open(base_config['model_dir'] + '/config.json', 'r') as fp:
                 config = json.load(fp=fp)
@@ -571,6 +575,7 @@ def main():
             config = process_config_env(config)
             run_one_env(config, rename_if_duplicate=False)
         elif not eval_dir_mode:
+            print('INFERENCE ONLY EXPERIMENT RUN. Must use pre-existing model as model_dir')
             # inference only experiment run, must be using a pre-existing model as its model_dir
             for config_file in config_paths:
                 with open(config_file, 'r') as fp:
@@ -615,7 +620,12 @@ def main():
                 print('****** Starting eval of:', model_config['model_dir'], '******')
                 run_one_env(model_config, 0, {}, rename_if_duplicate=True, output_file=None)
         else:
+            print("INFERENCE ONLY EVAL MODE")
             # eval mode
+            # in case we forgot to set the inference options
+            base_config['inference_only'] = True
+            base_config['inference_only_realtime'] = False
+
             model_paths = get_paths_of_models_in_dir(base_config['model_dir'])
             for model_dir in model_paths:
                 with open(os.path.join(model_dir, 'config.json'), 'r') as fp:
@@ -664,6 +674,7 @@ def main():
             batch = json.load(fp=fp)
 
         if config['use_batch'] and not config['inference_only']:
+            print('BATCH MODE')
             base_name = config['model_dir']
             summary_file_name = base_name + '/batch_summary.csv'
             count = 0
@@ -705,6 +716,7 @@ def main():
                 print('****** Starting a new run in this batch: ' + name + ' ******')
                 run_one_env(config, count, run_variables, rename_if_duplicate=True, output_file=summary_file_name)
         else:
+            print('SINGLE RUN MODE')
             config = process_config_post_batch(config)
             run_one_env(config, rename_if_duplicate=False)
 
