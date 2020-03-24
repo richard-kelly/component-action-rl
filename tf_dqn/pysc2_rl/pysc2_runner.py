@@ -331,7 +331,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         config['model_dir'] = config['model_dir'] + '_' + time
 
-    if not restore:
+    if not restore and not config['inference_only']:
         os.makedirs(config['model_dir'], exist_ok=True)
         with open(config['model_dir'] + '/config.json', 'w+') as fp:
             fp.write(json.dumps(config, indent=4))
