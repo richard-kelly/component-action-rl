@@ -558,7 +558,7 @@ def main():
         'inference_only_realtime',
         'inference_only_episodes'
     ]
-    if base_config['inference_only']:
+    if base_config['inference_only'] or eval_dir_mode:
         if not eval_dir_mode and len(sys.argv) == 1:
             print('INFERENCE ONLY MODE')
             # normal inference mode
