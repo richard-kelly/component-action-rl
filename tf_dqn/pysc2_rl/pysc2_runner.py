@@ -367,7 +367,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
     ) as env:
         tf.reset_default_graph()
         tf_config = tf.ConfigProto()
-        tf_config.gpu_options.allow_growth = True
+        # tf_config.gpu_options.allow_growth = True
         with tf.Session(config=tf_config) as sess:
             rl_agent = DQNAgent(sess, config, restore)
             # observations from the env are tuples of 1 Timestep per player
