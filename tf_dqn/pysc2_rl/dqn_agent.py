@@ -58,7 +58,8 @@ class DQNAgent:
             self._config
         )
         self._sess = sess
-        self._writer = tf.summary.FileWriter(self._config['model_dir'], self._sess.graph)
+        if not self._config['inference_only']:
+            self._writer = tf.summary.FileWriter(self._config['model_dir'], self._sess.graph)
 
         if restore:
             try:
