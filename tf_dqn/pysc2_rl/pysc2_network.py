@@ -28,6 +28,7 @@ component_order = ['function', 'queued', 'control_group_act', 'control_group_id'
                    'select_unit_act', 'select_unit_id', 'select_worker', 'build_queue_id', 'unload_id',
                    'screen', 'screen2', 'minimap']
 
+
 class SC2Network:
     def __init__(
             self,
@@ -285,7 +286,13 @@ class SC2Network:
                                 found_dependency = True
                                 break
                         if found_dependency:
+
                             action_index = tf.math.argmax(action_q_vals[c], axis=-1)
+                            if c == 'screen':
+                                # special handling for screen->screen2 only
+                                action_one_hot = tf.one_hot(action_index, num_options[c])
+                                action_one_hot = tf.reshape(action_one_hot, [-1, self._config['env']['screen_size'], self._config['env']['screen_size'], 1])
+                                component_one_hots_or_embeddings[c] = tf.stop_gradient(action_one_hot)
                             if num_options[c] <= 10:
                                 action_one_hot = tf.one_hot(action_index, num_options[c])
                                 # argmax should be non-differentiable but just to remind myself use stop_gradient
