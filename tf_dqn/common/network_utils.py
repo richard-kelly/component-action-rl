@@ -118,7 +118,9 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
             inputs = tf.concat(branches, axis=-1)
         elif type(part) is dict:
             func = part['type']
-            if func == 'max_pool':
+            if func == 'serial':
+                inputs = get_layers(inputs, part['spec'], activation, is_training, extra_inputs)
+            elif func == 'max_pool':
                 inputs = tf.layers.max_pooling2d(
                     inputs=inputs,
                     pool_size=part['pool_size'],
