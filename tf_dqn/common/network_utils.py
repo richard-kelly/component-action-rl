@@ -85,6 +85,9 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
             elif func == 'concat_extra':
                 if extra_inputs is None:
                     raise ValueError('Trying to concat extra input but there is none in', spec)
+                # if the extra_inputs is already a conv layer(s), just concat them to the inputs
+                if len(extra_inputs[0].shape) == 4:
+                    inputs = tf.concat([inputs] + extra_inputs, axis=-1)
                 # add extra input (output from another stream) differently based on whether inputs is dense or conv
                 if len(inputs.shape) == 2:
                     # dense
