@@ -15,6 +15,9 @@
     "max_steps": 250000,
     "max_episodes": 0,
 
+    "step_penalty": 0,
+    "episode_extra_win_reward": 0,
+
     "learning_rate": 1e-3,
     "learning_rate_decay_method": "none",
     "learning_rate_decay_steps": 10000,

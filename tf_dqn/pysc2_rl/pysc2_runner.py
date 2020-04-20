@@ -393,6 +393,8 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                 available_actions = obs.observation['available_actions']
 
                 step_reward = obs.reward / factor
+                if 'step_penalty' in config:
+                    step_reward -= config['step_penalty']
                 episode_reward += step_reward
                 win = 0
                 if obs.step_type is StepType.LAST:
@@ -402,6 +404,9 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                         win = get_win_loss(obs)
                         if win == 1:
                             win_count += 1
+                            if 'episode_extra_win_reward' in config:
+                                step_reward += config['episode_extra_win_reward']
+                                episode_reward += config['episode_extra_win_reward']
 
                     if eval_episode:
                         print("Eval Episode", episode, "finished. Steps:", step, "Win:", win, "Score:", episode_reward)
