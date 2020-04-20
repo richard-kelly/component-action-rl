@@ -158,7 +158,7 @@ class DQNAgent:
                 self._replay()
 
             # save checkpoint if needed
-            if self._steps % self._config['model_checkpoint_frequency'] == 0:
+            if self._steps % self._config['model_checkpoint_frequency'] == 0 or self._steps % self._config['max_steps'] == 0:
                 save_path = self._network.saver.save(
                     sess=self._sess,
                     save_path=self._config['model_dir'] + '/model.ckpt',
