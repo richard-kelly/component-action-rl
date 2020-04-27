@@ -698,6 +698,8 @@ def main():
                 if count > config['batch_runs']:
                     break
                 name = str(count)
+                if len(name) == 1:
+                    name = '0' + name
                 run_variables = {}
                 for param in batch['log_random']:
                     new_val = utils.log_uniform(batch['log_random'][param]['min'], batch['log_random'][param]['max'])
