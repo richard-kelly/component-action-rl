@@ -8,6 +8,8 @@
     "inference_only_epsilon": 0,
     "inference_only_episodes": 100,
 
+    "use_scripted_bot": "",
+
     "model_dir": "models/test18",
     "model_checkpoint_frequency": 100000,
     "model_checkpoint_max": 1,

@@ -18,6 +18,7 @@ from pysc2.env import sc2_env
 
 from tf_dqn.pysc2_rl.dqn_agent import DQNAgent
 from tf_dqn.common import utils
+from tf_dqn.pysc2_rl import scripted_bots
 
 # suppress warning messages
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
@@ -113,6 +114,7 @@ def get_action_function(obs, action, config):
     if func_id not in obs.observation['available_actions']:
         # no_op because of bad action - should not happen
         print("Action returned by RL agent is not available. Doing no_op.")
+        print(action)
         return actions.FunctionCall(0, [])
 
     args = []
@@ -369,7 +371,16 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         tf_config = tf.ConfigProto()
         # tf_config.gpu_options.allow_growth = True
         with tf.Session(config=tf_config) as sess:
-            rl_agent = DQNAgent(sess, config, restore)
+            if config['use_scripted_bot'] == 'noop':
+                rl_agent = scripted_bots.NoopBot()
+            elif config['use_scripted_bot'] == 'random':
+                rl_agent = scripted_bots.RandomBot(config)
+            elif config['use_scripted_bot'] == 'attack_weakest':
+                rl_agent = scripted_bots.AttackWeakestBot(config)
+            elif config['use_scripted_bot'] == 'attack_weakest_nearest':
+                rl_agent = scripted_bots.AttackWeakestNearestBot(config)
+            else:
+                rl_agent = DQNAgent(sess, config, restore)
             # observations from the env are tuples of 1 Timestep per player
             obs = env.reset()[0]
             step = 1
@@ -624,6 +635,27 @@ def main():
                 model_config = process_config_env(model_config)
                 print('****** Starting eval of:', model_config['model_dir'], '******')
                 run_one_env(model_config, 0, {}, rename_if_duplicate=True, output_file=None)
+        elif base_config['use_scripted_bot'] != "":
+            print("SCRIPTED BOT EVAL MODE: " + base_config['use_scripted_bot'])
+            # eval mode
+            # in case we forgot to set the inference options
+            base_config['inference_only'] = True
+            base_config['inference_only_realtime'] = False
+
+            with open(base_config['model_dir'] + '/config.json', 'w+') as fp:
+                fp.write(json.dumps(base_config, indent=4))
+
+            # in inference only mode we don't care about training stop times
+            base_config['max_steps'] = 0
+            base_config['max_episodes'] = 0
+            for option in always_use_from_base_config:
+                base_config[option] = base_config[option]
+            if base_config['inference_only_episodes'] > 0:
+                base_config['max_episodes'] = base_config['inference_only_episodes']
+
+            config = process_config_env(base_config)
+            print('****** Starting eval of:', config['model_dir'], '******')
+            run_one_env(config, 0, {}, rename_if_duplicate=False, output_file=None)
         else:
             print("INFERENCE ONLY EVAL MODE")
             # eval mode
