@@ -87,8 +87,7 @@ class AttackWeakestBot:
         hp = state['screen_unit_hit_points']
         target = (0, 0)
         target_hp = 1000000
-        # TODO: should do this in numpy, but it might take me as long to code as the time saved
-        # for all the times I have to run this
+        # TODO: should do this in numpy; did it below in other bot, but not using this one anymore
         for x in range(hp.shape[0]):
             for y in range(hp.shape[1]):
                 if state['screen_player_relative'][y][x] == 4:
@@ -122,37 +121,24 @@ class AttackWeakestNearestBot:
         action = {'function': self._attack_id}
 
         rel = state['screen_player_relative']
-        x_sum = 0
-        y_sum = 0
-        count = 0
-        for x in range(rel.shape[0]):
-            for y in range(rel.shape[1]):
-                if rel[y][x] == 1:
-                    x_sum += x
-                    y_sum += y
-                    count += 1
-        center_x = x_sum / count
-        center_y = y_sum / count
-
         hp = state['screen_unit_hit_points']
-        target = (0, 0)
-        target_hp = 1000000
-        dist = 1000000
-        # TODO: should do this in numpy, but it might take me as long to code as the time saved
-        # for all the times I have to run this
-        for x in range(hp.shape[0]):
-            for y in range(hp.shape[1]):
-                if state['screen_player_relative'][y][x] == 4:
-                    if hp[y][x] < target_hp:
-                        target_hp = hp[y][x]
-                        target = (x, y)
-                        dist = math.sqrt((center_x - x)**2 + (center_y - y)**2)
-                    elif hp[y][x] == target_hp:
-                        new_dist = math.sqrt((center_x - x)**2 + (center_y - y)**2)
-                        if new_dist < dist:
-                            target_hp = hp[y][x]
-                            target = (x, y)
-                            dist = new_dist
+
+        their_health = np.where(rel == 4, hp, np.NaN)
+        result = np.where(their_health == np.nanmin(their_health))
+        # zip the 2 arrays to get the exact coordinates
+        list_of_cordinates = list(zip(result[1], result[0]))
+        target = list_of_cordinates[0]
+        if len(list_of_cordinates) > 1:
+            friendly_unit_coords = np.where(rel == 1)
+            y_avg = np.average(friendly_unit_coords[0])
+            x_avg = np.average(friendly_unit_coords[1])
+
+            dist = 1000000
+            for x, y in list_of_cordinates:
+                new_dist = math.sqrt((x_avg - x) ** 2 + (y_avg - y) ** 2)
+                if new_dist < dist:
+                    target = (x, y)
+                    dist = new_dist
 
         action['screen'] = utils.grid_to_flattened(hp.shape[0], target)
 
