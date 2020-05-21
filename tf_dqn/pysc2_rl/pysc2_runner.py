@@ -96,10 +96,32 @@ def write_summary_file_line(file_path,
 
 def get_win_loss(obs):
     # if we're not using any food, then we don't have any units (and have lost)
-    if obs.observation['player'][features.Player.food_used] > 0:
+    player_relative = obs.observation['feature_screen'].player_relative
+    hp = obs.observation['feature_screen'].unit_hit_points
+
+    # friendly units alive?
+    if 1 in player_relative:
+        # enemy units alive?
+        if 4 in player_relative:
+            # both alive, so timer ran out
+            # player with most health wins
+            # this is very much inexact because units can overlap in feature map
+            our_health = np.where(player_relative == 1, hp, 0)
+            our_health = np.sum(our_health)
+            their_health = np.where(player_relative == 4, hp, 0)
+            their_health = np.sum(their_health)
+            if our_health == their_health:
+                return 0.5
+            elif our_health > their_health:
+                return 1
+            return 0
+        # win
         return 1
-    else:
-        return -1
+    elif 4 in player_relative:
+        # loss
+        return 0
+    # draw (all units dead)
+    return 0.5
 
 
 def get_action_function(obs, action, config):
@@ -413,11 +435,10 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                     # if this map type uses this win/loss calc
                     if win_loss:
                         win = get_win_loss(obs)
-                        if win == 1:
-                            win_count += 1
-                            if 'episode_extra_win_reward' in config:
-                                step_reward += config['episode_extra_win_reward']
-                                episode_reward += config['episode_extra_win_reward']
+                        win_count += win
+                        if 'episode_extra_win_reward' in config:
+                            step_reward += config['episode_extra_win_reward'] * win
+                            episode_reward += config['episode_extra_win_reward'] * win
 
                     if eval_episode:
                         print("Eval Episode", episode, "finished. Steps:", step, "Win:", win, "Score:", episode_reward)
