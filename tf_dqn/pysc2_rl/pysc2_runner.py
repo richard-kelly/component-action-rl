@@ -405,7 +405,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                 rl_agent = DQNAgent(sess, config, restore)
             # observations from the env are tuples of 1 Timestep per player
             obs = env.reset()[0]
-            step = 1
+            step = 0
             episode = 1
             episode_reward = 0
 
@@ -470,25 +470,27 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                 else:
                     terminal = False
 
-                if not eval_episode or config['train_on_eval_episodes']:
+                if not terminal and (not eval_episode or config['train_on_eval_episodes']):
                     step += 1
                 if step > 1:
                     rl_agent.observe(terminal=terminal, reward=step_reward, win=win, eval_episode=eval_episode)
 
-                action = rl_agent.act(state, available_actions, eval_episode=eval_episode)
-                action_for_sc = get_action_function(obs, action, config)
+                if not terminal:
+                    action = rl_agent.act(state, available_actions, eval_episode=eval_episode)
+                    action_for_sc = get_action_function(obs, action, config)
 
-                if not config['inference_only'] and (not eval_episode or config['train_on_eval_episodes']):
-                    action_name = actions.FUNCTIONS[action_for_sc.function].name
-                    if action_name not in actions_used:
-                        actions_used[action_name] = [0] * (episode - 1)
-                        actions_used[action_name].append(1)
-                    else:
-                        # this action may not have been used for some episode(s)
-                        actions_used[action_name] += [0] * (episode - len(actions_used[action_name]))
-                        # increment count for this episode
-                        actions_used[action_name][-1] += 1
-
+                    if not config['inference_only'] and (not eval_episode or config['train_on_eval_episodes']):
+                        action_name = actions.FUNCTIONS[action_for_sc.function].name
+                        if action_name not in actions_used:
+                            actions_used[action_name] = [0] * (episode - 1)
+                            actions_used[action_name].append(1)
+                        else:
+                            # this action may not have been used for some episode(s)
+                            actions_used[action_name] += [0] * (episode - len(actions_used[action_name]))
+                            # increment count for this episode
+                            actions_used[action_name][-1] += 1
+                else:
+                    action_for_sc = actions.FunctionCall(0, [])
                 # actions passed into env.step() are in a list with one action per player
                 obs = env.step([action_for_sc])[0]
 
