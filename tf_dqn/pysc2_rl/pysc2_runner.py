@@ -393,14 +393,17 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         tf_config = tf.ConfigProto()
         # tf_config.gpu_options.allow_growth = True
         with tf.Session(config=tf_config) as sess:
-            if config['use_scripted_bot'] == 'noop':
-                rl_agent = scripted_bots.NoopBot()
-            elif config['use_scripted_bot'] == 'random':
-                rl_agent = scripted_bots.RandomBot(config)
-            elif config['use_scripted_bot'] == 'attack_weakest':
-                rl_agent = scripted_bots.AttackWeakestBot(config)
-            elif config['use_scripted_bot'] == 'attack_weakest_nearest':
-                rl_agent = scripted_bots.AttackWeakestNearestBot(config)
+            if 'use_scripted_bot' in config:
+                if config['use_scripted_bot'] == 'noop':
+                    rl_agent = scripted_bots.NoopBot()
+                elif config['use_scripted_bot'] == 'random':
+                    rl_agent = scripted_bots.RandomBot(config)
+                elif config['use_scripted_bot'] == 'attack_weakest':
+                    rl_agent = scripted_bots.AttackWeakestBot(config)
+                elif config['use_scripted_bot'] == 'attack_weakest_nearest':
+                    rl_agent = scripted_bots.AttackWeakestNearestBot(config)
+                else:
+                    rl_agent = DQNAgent(sess, config, restore)
             else:
                 rl_agent = DQNAgent(sess, config, restore)
             # observations from the env are tuples of 1 Timestep per player
