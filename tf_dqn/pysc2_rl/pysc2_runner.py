@@ -424,6 +424,7 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
             match = re.match(r"^combat", config['env']['map_name'])
             win_loss = True if match else False
 
+            new_episode = True
             while (config['max_steps'] == 0 or step <= config['max_steps']) and (config['max_episodes'] == 0 or episode <= config['max_episodes']):
                 state = preprocess_state(obs, config)
                 available_actions = obs.observation['available_actions']
@@ -433,6 +434,9 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                     step_reward -= config['step_penalty']
                 episode_reward += step_reward
                 win = 0
+
+                terminal = False
+                # handle episode end
                 if obs.step_type is StepType.LAST:
                     terminal = True
                     # if this map type uses this win/loss calc
@@ -470,15 +474,16 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                     else:
                         eval_episode = config['do_eval_episodes'] and episode % config['one_eval_episode_per'] == 0
 
-                else:
-                    terminal = False
-
+                # we don't take an action (from the perspective of the agent) on a terminal state, so no step++
                 if not terminal and (not eval_episode or config['train_on_eval_episodes']):
                     step += 1
-                if step > 1:
+
+                # observe the reward if this state is not the first of a new episode
+                if not new_episode:
                     rl_agent.observe(terminal=terminal, reward=step_reward, win=win, eval_episode=eval_episode)
 
                 if not terminal:
+                    new_episode = False
                     action = rl_agent.act(state, available_actions, eval_episode=eval_episode)
                     action_for_sc = get_action_function(obs, action, config)
 
@@ -493,7 +498,10 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
                             # increment count for this episode
                             actions_used[action_name][-1] += 1
                 else:
+                    # take dummy no_op action if this is a terminal state
                     action_for_sc = actions.FunctionCall(0, [])
+                    # if this was a terminal state, the next state is going to be the beginning of an episode
+                    new_episode = True
                 # actions passed into env.step() are in a list with one action per player
                 obs = env.step([action_for_sc])[0]
 
