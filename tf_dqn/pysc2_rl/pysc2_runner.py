@@ -106,10 +106,13 @@ def get_win_loss(obs):
             # both alive, so timer ran out
             # player with most health wins
             # this is very much inexact because units can overlap in feature map
-            our_health = np.where(player_relative == 1, hp, 0)
-            our_health = np.sum(our_health)
-            their_health = np.where(player_relative == 4, hp, 0)
-            their_health = np.sum(their_health)
+            our_health = 0
+            their_health = 0
+            for unit in obs.observation.raw_units:
+                if unit.alliance == 1:
+                    our_health += unit.health
+                else:
+                    their_health += unit.health
             if our_health == their_health:
                 return 0.5
             elif our_health > their_health:
@@ -383,7 +386,9 @@ def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, 
         players=[sc2_env.Agent(sc2_env.Race['random'], None)],
         agent_interface_format=features.AgentInterfaceFormat(
             feature_dimensions=features.Dimensions(config['env']['screen_size'], config['env']['minimap_size']),
-            action_space=actions.ActionSpace.FEATURES
+            action_space=actions.ActionSpace.FEATURES,
+            use_feature_units=True,
+            use_raw_units=True
         ),
         visualize=config['env']['visualize'],
         step_mul=config['env']['step_mul'],
