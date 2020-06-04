@@ -111,8 +111,10 @@ def get_win_loss(obs):
             for unit in obs.observation.raw_units:
                 if unit.alliance == 1:
                     our_health += unit.health
+                    our_health += unit.shield
                 else:
                     their_health += unit.health
+                    their_health += unit.shield
             if our_health == their_health:
                 return 0.5
             elif our_health > their_health:
