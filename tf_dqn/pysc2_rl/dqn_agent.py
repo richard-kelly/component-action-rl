@@ -61,6 +61,10 @@ class DQNAgent:
         if not self._config['inference_only']:
             self._writer = tf.summary.FileWriter(self._config['model_dir'], self._sess.graph)
 
+            # start output files
+            with open(self._config['model_dir'] + '/episode_summaries.dat', 'a+') as f:
+                f.write('step episode reward avg_reward win avg_win\n')
+
         if restore:
             try:
                 if config['copy_model_from'] == "":
@@ -120,6 +124,10 @@ class DQNAgent:
                 self._episodes += 1
             if not self._config['inference_only']:
                 self._writer.add_summary(summary, self._steps)
+                # write out some episode stats for easy plotting later
+                with open(self._config['model_dir'] + '/episode_summaries.dat', 'a+') as f:
+                    f.write(str(self._steps) + ' ' + str(self._episodes) + ' ' + str(self._episode_score) + ' ' + str(self._average_episode_score) + ' ' + str(win) + ' ' + str(self._average_episode_win) + '\n')
+
             self._episode_score = 0
 
         # don't store things in memory if only doing inference or not training on eval episodes
