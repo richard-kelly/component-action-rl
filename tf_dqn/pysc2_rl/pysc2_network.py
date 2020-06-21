@@ -198,6 +198,9 @@ class SC2Network:
                     kernel_initializer=tf.variance_scaling_initializer(scale=2.0),
                     name='value'
                 )
+        else:
+            # returning this from the function for debugging purposes, so need it to exist if not using dueling net
+            value = None
 
         with tf.variable_scope('shared_non_spatial_network'):
             shared_non_spatial = network_utils.get_layers(
@@ -304,7 +307,7 @@ class SC2Network:
                                 )(action_index)
 
         # return action_q_vals
-        return action_q_vals
+        return action_q_vals, value, component_streams
 
     def _get_state_placeholder(self):
         screen_shape = [None, self._config['env']['screen_size'], self._config['env']['screen_size']]
@@ -439,10 +442,10 @@ class SC2Network:
         # primary and target Q nets
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
             # self._q, self._q_weights = self._get_network(self._states)
-            self._q = self._get_network(self._states)
+            self._q, self._value, self._advantage = self._get_network(self._states)
         with tf.variable_scope('Q_target'):
             # self._q_target, self._q_target_weights = self._get_network(self._next_states)
-            self._q_target = self._get_network(self._next_states)
+            self._q_target, _, _ = self._get_network(self._next_states)
         # used for copying parameters from primary to target net
         self._q_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_primary")
         self._q_target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="Q_target")
@@ -683,7 +686,8 @@ class SC2Network:
         for name in self._states:
             # newaxis adds a new dimension of length 1 at the beginning (the batch size)
             feed_dict[self._states[name]] = np.expand_dims(state[name], axis=0)
-        return sess.run([self._predict_summaries, self._q], feed_dict=feed_dict)
+        summaries, q, value, advantage = sess.run([self._predict_summaries, self._q, self._value, self._advantage], feed_dict=feed_dict)
+        return summaries, q, value, advantage
 
     def train_batch(self, sess, global_step, states, actions, rewards, next_states, terminal, weights):
         # need batch size to reshape actions
