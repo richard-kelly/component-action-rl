@@ -687,7 +687,7 @@ class SC2Network:
             # newaxis adds a new dimension of length 1 at the beginning (the batch size)
             feed_dict[self._states[name]] = np.expand_dims(state[name], axis=0)
         summaries, q, value, advantage = sess.run([self._predict_summaries, self._q, self._value, self._advantage], feed_dict=feed_dict)
-        return summaries, q, value, advantage
+        return summaries, q
 
     def train_batch(self, sess, global_step, states, actions, rewards, next_states, terminal, weights):
         # need batch size to reshape actions
