@@ -61,8 +61,10 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
     #       max_pool         - pool_size, strides, padding (see tf.layers.max_pooling2d)
     #       avg_pool         - pool_size, strides, padding (see tf.layers.average_pooling2d)
     #       dense            - units (no activation or bn)
+    #       dense_act        - units (no activation or bn)
     #       resblock         - filters, kernel_size, count, downsample [optional], original [optional]
     #       conv_act_bn      - filters, kernel_size, stride [optional]
+    #       conv_act         - filters, kernel_size, stride [optional]
     #       conv             - filters, kernel_size, stride [optional]
     #
     # activation is the default activation function
@@ -134,13 +136,16 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
                     strides=part['strides'],
                     padding=part['padding']
                 )
-            elif func == 'dense':
+            elif func == 'dense' or func == 'dense_act':
                 inputs = tf.layers.dense(
                     inputs,
                     part['units'],
                     activation=None,
                     kernel_initializer=weight_init
                 )
+                if func == 'dense_act':
+                    act = get_activation(activation)
+                    inputs = act(inputs)
             elif func == 'resblock':
                 downsample = False if 'downsample' not in part else part['downsample']
                 for _ in range(part['count']):
@@ -148,7 +153,7 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
                         inputs = res_block(inputs, part['filters'], part['kernel_size'], is_training, activation, downsample)
                     else:
                         inputs = res_block_preactivation(inputs, part['filters'], part['kernel_size'], is_training, activation, downsample)
-            elif func == 'conv_act_bn':
+            elif func == 'conv_act_bn' or func == 'conv_act':
                 inputs = tf.layers.conv2d(
                     inputs=inputs,
                     filters=part['filters'],
@@ -158,7 +163,8 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
                     activation=get_activation(activation),
                     kernel_initializer=weight_init
                 )
-                inputs = tf.layers.batch_normalization(inputs, training=is_training)
+                if func == 'conv_act_bn':
+                    inputs = tf.layers.batch_normalization(inputs, training=is_training)
             elif func == 'conv':
                 inputs = tf.layers.conv2d(
                     inputs=inputs,
