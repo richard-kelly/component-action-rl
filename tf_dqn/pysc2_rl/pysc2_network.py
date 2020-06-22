@@ -628,6 +628,7 @@ class SC2Network:
         self._eval_episode_summaries = tf.summary.merge_all(scope='evaluation_episode_summaries')
 
         with tf.variable_scope('predict_summaries'):
+            # log average q-val of components used in action
             predict_actions = {}
             for name, q_vals in self._q.items():
                 predict_actions[name] = tf.argmax(q_vals, axis=1)
@@ -641,6 +642,10 @@ class SC2Network:
                 count = count + argument_mask
             predicted_q_val_avg = tf.reduce_sum(tf.stack(predict_q_vals)) / count
             tf.summary.scalar('predicted_q_val', tf.squeeze(predicted_q_val_avg))
+
+            # also log state value if using dueling net
+            if self._config['dueling_network']:
+                tf.summary.scalar('state_value', tf.squeeze(self._value))
         self._predict_summaries = tf.summary.merge_all(scope='predict_summaries')
 
         # variable initializer
