@@ -137,7 +137,7 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
             elif func == 'dense':
                 inputs = tf.layers.dense(
                     inputs,
-                    part,
+                    part['units'],
                     activation=None,
                     kernel_initializer=weight_init
                 )
