@@ -645,7 +645,7 @@ class SC2Network:
 
             # also log state value if using dueling net
             if self._config['dueling_network']:
-                tf.summary.scalar('state_value', self._value)
+                tf.summary.scalar('state_value', tf.squeeze(self._value))
         self._predict_summaries = tf.summary.merge_all(scope='predict_summaries')
 
         # variable initializer
