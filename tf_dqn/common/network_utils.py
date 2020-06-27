@@ -64,8 +64,10 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None, us
     #       max_pool         - pool_size, strides, padding (see tf.layers.max_pooling2d)
     #       avg_pool         - pool_size, strides, padding (see tf.layers.average_pooling2d)
     #       dense            - units (no activation or bn)
+    #       dense_act        - units (no bn)
     #       resblock         - filters, kernel_size, count, downsample [optional], original [optional]
     #       conv_act_bn      - filters, kernel_size, stride [optional]
+    #       conv_act         - filters, kernel_size, stride [optional]
     #       conv             - filters, kernel_size, stride [optional]
     #
     # activation is the default activation function
@@ -146,14 +148,16 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None, us
                     strides=part['strides'],
                     padding=part['padding']
                 )
-            elif func == 'dense':
-
+            elif func == 'dense' or func == 'dense_act':
                 dense = tf.layers.Dense(
-                    part,
+                    part['units'],
                     activation=None,
                     kernel_initializer=weight_init
                 )
                 inputs = dense(inputs)
+                if func == 'dense_act':
+                    act = get_activation(activation)
+                    inputs = act(inputs)
                 if use_histograms:
                     weights = dense.kernel
                     bias = dense.bias
@@ -168,25 +172,7 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None, us
                         inputs = res_block(inputs, part['filters'], part['kernel_size'], is_training, activation, downsample)
                     else:
                         inputs = res_block_preactivation(inputs, part['filters'], part['kernel_size'], is_training, activation, downsample)
-            elif func == 'conv_act_bn':
-                conv = tf.layers.Conv2D(
-                    filters=part['filters'],
-                    kernel_size=part['kernel_size'],
-                    strides=part['stride'] if 'stride' in part else 1,
-                    padding='same',
-                    activation=get_activation(activation),
-                    kernel_initializer=weight_init
-                )
-                inputs = conv(inputs)
-                if use_histograms:
-                    weights = conv.kernel
-                    bias = conv.bias
-                    name = 'conv_' + str(conv_count) + '_'
-                    tf.summary.histogram(name + 'weights', weights)
-                    tf.summary.histogram(name + 'bias', bias)
-                    conv_count += 1
-                inputs = tf.layers.batch_normalization(inputs, training=is_training)
-            elif func == 'conv':
+            elif func == 'conv_act_bn' or func == 'conv_act' or func == 'conv':
                 conv = tf.layers.Conv2D(
                     filters=part['filters'],
                     kernel_size=part['kernel_size'],
@@ -196,6 +182,11 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None, us
                     kernel_initializer=weight_init
                 )
                 inputs = conv(inputs)
+                if func == 'conv_act_bn' or func == 'conv_act':
+                    act = get_activation(activation)
+                    inputs = act(inputs)
+                if func == 'conv_act_bn':
+                    inputs = tf.layers.batch_normalization(inputs, training=is_training)
                 if use_histograms:
                     weights = conv.kernel
                     bias = conv.bias
