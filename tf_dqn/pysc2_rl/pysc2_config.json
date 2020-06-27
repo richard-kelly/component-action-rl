@@ -99,7 +99,8 @@
         },
         "default_activation": "relu",
         "scale_gradients_at_shared_spatial_split": true,
-        "scale_gradients_at_shared_non_spatial_split": true
+        "scale_gradients_at_shared_non_spatial_split": true,
+        "use_histograms": true
     },
 
     "env": {

@@ -47,6 +47,10 @@ class SC2Network:
         self._action_list = config['env']['computed_action_list']
         self._num_control_groups = config['env']['num_control_groups']
 
+        self._use_histograms = False
+        if 'use_histograms' in config['network_structure']:
+            self._use_histograms = config['network_structure']['use_histograms']
+
         # define the placeholders
         self._global_step = None
         self._states = None
@@ -68,7 +72,7 @@ class SC2Network:
         # now setup the model
         self._define_model()
 
-    def _get_network(self, inputs):
+    def _get_network(self, inputs, use_histograms=False):
         with tf.variable_scope('input_processing'):
             # all processed screen input will be added to this list
             to_concat = []
@@ -162,7 +166,8 @@ class SC2Network:
                 screen,
                 self._config['network_structure']['shared_spatial_network'],
                 self._config['network_structure']['default_activation'],
-                self._training
+                self._training,
+                use_histograms=use_histograms
             )
 
         if self._config['network_structure']['scale_gradients_at_shared_spatial_split']:
@@ -189,7 +194,8 @@ class SC2Network:
                     shared_spatial_net,
                     self._config['network_structure']['value_network'],
                     self._config['network_structure']['default_activation'],
-                    self._training
+                    self._training,
+                    use_histograms=use_histograms
                 )
                 value = tf.layers.dense(
                     fc_value,
@@ -207,7 +213,8 @@ class SC2Network:
                 shared_spatial_net,
                 self._config['network_structure']['shared_non_spatial_network'],
                 self._config['network_structure']['default_activation'],
-                self._training
+                self._training,
+                use_histograms=use_histograms
             )
 
         if self._config['network_structure']['scale_gradients_at_shared_non_spatial_split']:
@@ -254,7 +261,8 @@ class SC2Network:
                         spec,
                         self._config['network_structure']['default_activation'],
                         self._training,
-                        dependencies
+                        dependencies,
+                        use_histograms=use_histograms
                     )
 
                     if c not in spatial_components or self._config['network_structure']['end_spatial_streams_with_dense_instead_of_flatten']:
@@ -442,7 +450,7 @@ class SC2Network:
         # primary and target Q nets
         with tf.variable_scope('Q_primary', regularizer=self._regularizer):
             # self._q, self._q_weights = self._get_network(self._states)
-            self._q, self._value, self._advantage = self._get_network(self._states)
+            self._q, self._value, self._advantage = self._get_network(self._states, self._use_histograms)
         with tf.variable_scope('Q_target'):
             # self._q_target, self._q_target_weights = self._get_network(self._next_states)
             self._q_target, _, _ = self._get_network(self._next_states)
@@ -598,6 +606,7 @@ class SC2Network:
 
         # tensorboard summaries
         self._train_summaries = tf.summary.merge_all(scope='losses')
+        self._weight_summaries = tf.summary.merge_all(scope='Q_primary')
 
         with tf.variable_scope('episode_summaries'):
             # score here might be a sparse win/loss +1/-1, or it might be a shaped reward signal
@@ -728,7 +737,7 @@ class SC2Network:
             if using:
                 feed_dict[self._actions[name]] = actions[name].reshape(batch_size)
 
-        summary, td_abs, _ = sess.run([self._train_summaries, self._td_abs, self._optimizer], feed_dict=feed_dict)
+        summary1, summary2, td_abs, _ = sess.run([self._train_summaries, self._weight_summaries, self._td_abs, self._optimizer], feed_dict=feed_dict)
 
-        return summary, td_abs
+        return [summary1, summary2], td_abs
 

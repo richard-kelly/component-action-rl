@@ -4,6 +4,9 @@ import numpy as np
 # He weight initialization
 weight_init = tf.variance_scaling_initializer(scale=2.0)
 
+dense_count = 0
+conv_count = 0
+
 
 def get_activation(activation_name):
     if activation_name == 'relu':
@@ -48,7 +51,7 @@ def res_block_preactivation(inputs, filters, kernel, is_training, activation='re
     return conv + inputs
 
 
-def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
+def get_layers(input_layer, spec, activation, is_training, extra_inputs=None, use_histograms=False):
     # spec is a list, with various types as valid elements:
     #   'bn'                 - batch norm
     #   'relu'               - ReLU
@@ -70,6 +73,8 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
 
     # helper function mainly so that the [] concat function is easy to specify in the config
     def get_layers_from_part(inputs, part):
+        global dense_count
+        global conv_count
         if type(part) is str:
             func = part.lower()
             if func == 'bn':
@@ -104,12 +109,19 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
             else:
                 raise ValueError(part + ' is not a valid type of network part in', spec)
         elif type(part) is int:
-            inputs = tf.layers.dense(
-                inputs,
+            dense = tf.layers.Dense(
                 part,
                 activation=get_activation(activation),
                 kernel_initializer=weight_init
             )
+            inputs = dense(inputs)
+            if use_histograms:
+                weights = dense.kernel
+                bias = dense.bias
+                name = 'dense_' + str(dense_count) + '_'
+                tf.summary.histogram(name + 'weights', weights)
+                tf.summary.histogram(name + 'bias', bias)
+                dense_count += 1
             inputs = tf.layers.batch_normalization(inputs, training=is_training)
         elif type(part) is list:
             branches = []
@@ -135,12 +147,20 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
                     padding=part['padding']
                 )
             elif func == 'dense':
-                inputs = tf.layers.dense(
-                    inputs,
+
+                dense = tf.layers.Dense(
                     part,
                     activation=None,
                     kernel_initializer=weight_init
                 )
+                inputs = dense(inputs)
+                if use_histograms:
+                    weights = dense.kernel
+                    bias = dense.bias
+                    name = 'dense_' + str(dense_count) + '_'
+                    tf.summary.histogram(name + 'weights', weights)
+                    tf.summary.histogram(name + 'bias', bias)
+                    dense_count += 1
             elif func == 'resblock':
                 downsample = False if 'downsample' not in part else part['downsample']
                 for _ in range(part['count']):
@@ -149,8 +169,7 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
                     else:
                         inputs = res_block_preactivation(inputs, part['filters'], part['kernel_size'], is_training, activation, downsample)
             elif func == 'conv_act_bn':
-                inputs = tf.layers.conv2d(
-                    inputs=inputs,
+                conv = tf.layers.Conv2D(
                     filters=part['filters'],
                     kernel_size=part['kernel_size'],
                     strides=part['stride'] if 'stride' in part else 1,
@@ -158,10 +177,17 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
                     activation=get_activation(activation),
                     kernel_initializer=weight_init
                 )
+                inputs = conv(inputs)
+                if use_histograms:
+                    weights = conv.kernel
+                    bias = conv.bias
+                    name = 'conv_' + str(conv_count) + '_'
+                    tf.summary.histogram(name + 'weights', weights)
+                    tf.summary.histogram(name + 'bias', bias)
+                    conv_count += 1
                 inputs = tf.layers.batch_normalization(inputs, training=is_training)
             elif func == 'conv':
-                inputs = tf.layers.conv2d(
-                    inputs=inputs,
+                conv = tf.layers.Conv2D(
                     filters=part['filters'],
                     kernel_size=part['kernel_size'],
                     strides=part['stride'] if 'stride' in part else 1,
@@ -169,6 +195,14 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None):
                     activation=None,
                     kernel_initializer=weight_init
                 )
+                inputs = conv(inputs)
+                if use_histograms:
+                    weights = conv.kernel
+                    bias = conv.bias
+                    name = 'conv_' + str(conv_count) + '_'
+                    tf.summary.histogram(name + 'weights', weights)
+                    tf.summary.histogram(name + 'bias', bias)
+                    conv_count += 1
             else:
                 raise ValueError(func + ' is not a valid type of network part.')
         else:
