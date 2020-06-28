@@ -267,11 +267,22 @@ class SC2Network:
 
                     if c not in spatial_components or self._config['network_structure']['end_spatial_streams_with_dense_instead_of_flatten']:
                         # make a dense layer with width equal to number of possible actions
-                        component_streams[c] = tf.layers.dense(component_stream, num_options[c], name=c)
+                        dense = tf.layers.Dense(
+                            num_options[c],
+                            name=c
+                        )
+                        component_streams[c] = dense(component_stream)
+                        if self._use_histograms:
+                            weights = dense.kernel
+                            bias = dense.bias
+                            name = 'final_dense_' + c + '_'
+                            tf.summary.histogram(name + 'weights', weights)
+                            tf.summary.histogram(name + 'bias', bias)
                     else:
                         # flatten a conv output
                         component_streams[c] = tf.reshape(component_stream, [-1, num_options[c]], name=c)
-
+                if self._use_histograms:
+                    tf.summary.histogram('advantage_' + c, component_streams[c])
                 if self._config['dueling_network']:
                     # action_q_vals is A(s,a), value is V(s)
                     # Q(s,a) = V(s) + A(s,a) - 1/|A| * SUM_a(A(s,a))
@@ -605,8 +616,9 @@ class SC2Network:
         self._optimizer = tf.group([self._optimizer, self._update_ops])
 
         # tensorboard summaries
-        self._train_summaries = tf.summary.merge_all(scope='losses')
-        self._weight_summaries = tf.summary.merge_all(scope='Q_primary')
+        self._train_summaries = tf.summary.merge_all(scope='losses|Q_primary/advantage')
+        if self._use_histograms:
+            self._weight_summaries = tf.summary.merge_all(scope='Q_primary/.*_network|Q_primary/.*_stream')
 
         with tf.variable_scope('episode_summaries'):
             # score here might be a sparse win/loss +1/-1, or it might be a shaped reward signal
@@ -736,8 +748,11 @@ class SC2Network:
         for name, using in self._action_components.items():
             if using:
                 feed_dict[self._actions[name]] = actions[name].reshape(batch_size)
+        if self._use_histograms:
+            td_abs, _, *summaries = sess.run([self._td_abs, self._optimizer, self._train_summaries, self._weight_summaries], feed_dict=feed_dict)
+        else:
+            td_abs, _, *summaries = sess.run(
+                [self._td_abs, self._optimizer, self._train_summaries], feed_dict=feed_dict)
 
-        summary1, summary2, td_abs, _ = sess.run([self._train_summaries, self._weight_summaries, self._td_abs, self._optimizer], feed_dict=feed_dict)
-
-        return [summary1, summary2], td_abs
+        return summaries, td_abs
 

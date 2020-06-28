@@ -7,7 +7,6 @@ weight_init = tf.variance_scaling_initializer(scale=2.0)
 dense_count = 0
 conv_count = 0
 
-
 def get_activation(activation_name):
     if activation_name == 'relu':
         return tf.nn.relu
@@ -72,6 +71,11 @@ def get_layers(input_layer, spec, activation, is_training, extra_inputs=None, us
     #
     # activation is the default activation function
     # extra_inputs is a list of tensors to be concatenated with the network using concat_extra type
+
+    global dense_count
+    global conv_count
+    dense_count = 0
+    conv_count = 0
 
     # helper function mainly so that the [] concat function is easy to specify in the config
     def get_layers_from_part(inputs, part):
