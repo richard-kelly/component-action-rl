@@ -4,7 +4,7 @@ import math
 import random
 import time
 
-from tf_dqn.pysc2_rl.pysc2_network import SC2Network
+from tf_dqn.pysc2_rl.dqn_network import SC2Network
 from tf_dqn.common.latest_replay_mem import LatestReplayMemory
 from tf_dqn.common.prioritized_replay_mem import PrioritizedReplayMemory
 

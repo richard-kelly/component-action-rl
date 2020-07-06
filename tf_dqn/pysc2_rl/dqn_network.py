@@ -3,30 +3,7 @@ import numpy as np
 import math
 
 from tf_dqn.common import network_utils
-
-from pysc2.lib import actions as pysc2_actions
-from pysc2.lib import static_data as pysc2_static_data
-
-spatial_components = ['screen', 'screen2', 'minimap']
-all_components = dict(
-        function=True,
-        screen=False,
-        minimap=False,
-        screen2=False,
-        queued=False,
-        control_group_act=False,
-        control_group_id=False,
-        select_point_act=False,
-        select_add=False,
-        select_unit_act=False,
-        select_unit_id=False,
-        select_worker=False,
-        build_queue_id=False,
-        unload_id=False
-    )
-component_order = ['function', 'queued', 'control_group_act', 'control_group_id', 'select_point_act', 'select_add',
-                   'select_unit_act', 'select_unit_id', 'select_worker', 'build_queue_id', 'unload_id',
-                   'screen', 'screen2', 'minimap']
+from . import pysc2_common_net_funcs
 
 
 class SC2Network:
@@ -73,93 +50,7 @@ class SC2Network:
         self._define_model()
 
     def _get_network(self, inputs, use_histograms=False):
-        with tf.variable_scope('input_processing'):
-            # all processed screen input will be added to this list
-            to_concat = []
-
-            screen_player_relative_one_hot = tf.contrib.layers.one_hot_encoding(
-                labels=inputs['screen_player_relative'],
-                num_classes=5
-            )
-            # we only want self and enemy:
-            # NONE = 0, SELF = 1, ALLY = 2, NEUTRAL = 3, ENEMY = 4
-            screen_player_relative_self = screen_player_relative_one_hot[:, :, :, 1]
-            screen_player_relative_self = tf.expand_dims(screen_player_relative_self, axis=-1)
-            to_concat.append(screen_player_relative_self)
-            screen_player_relative_enemy = screen_player_relative_one_hot[:, :, :, 4]
-            screen_player_relative_enemy = tf.expand_dims(screen_player_relative_enemy, axis=-1)
-            to_concat.append(screen_player_relative_enemy)
-
-            # observation is in int, but network uses floats
-            # selected is binary, just 1 or 0, so is already in one hot form
-            screen_selected_one_hot = tf.cast(inputs['screen_selected'], dtype=tf.float32)
-            screen_selected_one_hot = tf.expand_dims(screen_selected_one_hot, axis=-1)
-            to_concat.append(screen_selected_one_hot)
-
-            if self._config['env']['use_hp_log_values']:
-                # scale hit points (0-?) logarithmically (add 1 to avoid undefined) since they can be so high
-                screen_unit_hit_points = tf.math.log1p(tf.cast(inputs['screen_unit_hit_points'], dtype=tf.float32))
-                # add a dimension (depth)
-                screen_unit_hit_points = tf.expand_dims(screen_unit_hit_points, axis=-1)
-                to_concat.append(screen_unit_hit_points)
-            if self._config['env']['use_shield_log_values']:
-                screen_unit_shields = tf.math.log1p(tf.cast(inputs['screen_unit_shields'], dtype=tf.float32))
-                screen_unit_shields = tf.expand_dims(screen_unit_shields, axis=-1)
-                to_concat.append(screen_unit_shields)
-
-            if self._config['env']['use_hp_ratios']:
-                # ratio goes up to 255 max
-                screen_unit_hit_points_ratio = tf.cast(inputs['screen_unit_hit_points_ratio'] / 255, dtype=tf.float32)
-                screen_unit_hit_points_ratio = tf.expand_dims(screen_unit_hit_points_ratio, axis=-1)
-                to_concat.append(screen_unit_hit_points_ratio)
-            if self._config['env']['use_shield_ratios']:
-                screen_unit_shields_ratio = tf.cast(inputs['screen_unit_shields_ratio'] / 255, dtype=tf.float32)
-                screen_unit_shields_ratio = tf.expand_dims(screen_unit_shields_ratio, axis=-1)
-                to_concat.append(screen_unit_shields_ratio)
-
-            if self._config['env']['use_hp_cats']:
-                ones = tf.ones(tf.shape(inputs['screen_unit_hit_points']))
-                zeros = tf.zeros(tf.shape(inputs['screen_unit_hit_points']))
-                hp = inputs['screen_unit_hit_points']
-                # add a dimension (depth) to each
-                vals = self._config['env']['hp_cats_values']
-                to_concat.append(tf.expand_dims(tf.where(hp <= vals[0], ones, zeros), axis=-1))
-                for i in range(1, len(vals)):
-                    to_concat.append(
-                        tf.expand_dims(tf.where(tf.logical_and(hp > vals[i-1], hp <= vals[i]), ones, zeros), axis=-1)
-                    )
-                to_concat.append(tf.expand_dims(tf.where(hp > vals[-1], ones, zeros), axis=-1))
-            if self._config['env']['use_shield_cats']:
-                ones = tf.ones(tf.shape(inputs['screen_unit_hit_points']))
-                zeros = tf.zeros(tf.shape(inputs['screen_unit_hit_points']))
-                sh = inputs['screen_unit_shields']
-                vals = self._config['env']['hp_cats_values']
-                to_concat.append(tf.expand_dims(tf.where(sh <= vals[0], ones, zeros), axis=-1))
-                for i in range(1, len(vals)):
-                    to_concat.append(
-                        tf.expand_dims(tf.where(tf.logical_and(sh > vals[i - 1], sh <= vals[i]), ones, zeros), axis=-1)
-                    )
-                to_concat.append(tf.expand_dims(tf.where(sh > vals[-1], ones, zeros), axis=-1))
-
-            if self._config['env']['use_all_unit_types']:
-                # pysc2 has a list of known unit types, and the max unit id is around 2000 but there are 259 units (v3.0)
-                # 4th root of 259 is ~4 (Google rule of thumb for ratio of embedding dimensions to number of categories)
-                # src: https://developers.googleblog.com/2017/11/introducing-tensorflow-feature-columns.html
-                # embedding output: [batch_size, screen y, screen x, output_dim]
-                screen_unit_type = tf.keras.layers.Embedding(
-                    input_dim=len(pysc2_static_data.UNIT_TYPES),
-                    output_dim=4
-                )(inputs['screen_unit_type'])
-                to_concat.append(screen_unit_type)
-            elif self._config['env']['use_specific_unit_types']:
-                screen_unit_type = tf.contrib.layers.one_hot_encoding(
-                    labels=inputs['screen_unit_type'],
-                    num_classes=len(self._config['env']['specific_unit_types'])
-                )[:, :, :, 1:]
-                # above throws away first layer that has zeros
-                to_concat.append(screen_unit_type)
-
-            screen = tf.concat(to_concat, axis=-1, name='screen_input')
+        screen = pysc2_common_net_funcs.preprocess_state_input(inputs, self._config)
 
         with tf.variable_scope('shared_spatial_network'):
             shared_spatial_net = network_utils.get_layers(
@@ -176,7 +67,7 @@ class SC2Network:
                 # (always one more branch than number of spatial components)
                 spatial_count = 1
                 for name, using in self._action_components.items():
-                    if using and name in spatial_components:
+                    if using and name in pysc2_common_net_funcs.spatial_components:
                         spatial_count += 1
                 scale = 1 / spatial_count
                 shared_spatial_net = (1 - scale) * tf.stop_gradient(shared_spatial_net) + scale * shared_spatial_net
@@ -222,12 +113,12 @@ class SC2Network:
                 # scale because multiple action component streams are meeting here
                 non_spatial_count = 0
                 for name, using in self._action_components.items():
-                    if using and name not in spatial_components:
+                    if using and name not in pysc2_common_net_funcs.spatial_components:
                         non_spatial_count += 1
                 scale = 1 / non_spatial_count
                 shared_non_spatial = (1 - scale) * tf.stop_gradient(shared_non_spatial) + scale * shared_non_spatial
 
-        num_options = self._get_num_options_per_function()
+        num_options = pysc2_common_net_funcs.get_num_options_per_function(self._config)
 
         # create each component stream
         component_streams = {}
@@ -235,12 +126,12 @@ class SC2Network:
         action_q_vals = {}
         # if another stream requires the output of another stream
         component_one_hots_or_embeddings = {}
-        for c in component_order:
+        for c in pysc2_common_net_funcs.component_order:
             # are we using this component?
             if self._action_components[c]:
                 with tf.variable_scope(c + '_stream'):
                     stream_input = shared_non_spatial
-                    if c in spatial_components:
+                    if c in pysc2_common_net_funcs.spatial_components:
                         stream_input = shared_spatial_net
 
                     # optionally one stream of fully connected layers per component
@@ -265,7 +156,7 @@ class SC2Network:
                         use_histograms=use_histograms
                     )
 
-                    if c not in spatial_components or self._config['network_structure']['end_spatial_streams_with_dense_instead_of_flatten']:
+                    if c not in pysc2_common_net_funcs.spatial_components or self._config['network_structure']['end_spatial_streams_with_dense_instead_of_flatten']:
                         # make a dense layer with width equal to number of possible actions
                         dense = tf.layers.Dense(
                             num_options[c],
@@ -328,131 +219,17 @@ class SC2Network:
         # return action_q_vals
         return action_q_vals, value, component_streams
 
-    def _get_state_placeholder(self):
-        screen_shape = [None, self._config['env']['screen_size'], self._config['env']['screen_size']]
-
-        # things that always go in
-        state_placeholder = dict(
-            screen_player_relative=tf.placeholder(
-                shape=screen_shape,
-                dtype=tf.int32,
-                name='screen_player_relative'
-            ),
-            screen_selected=tf.placeholder(
-                shape=screen_shape,
-                dtype=tf.int32,
-                name='screen_selected'
-            ),
-            available_actions=tf.placeholder(
-                shape=[None, len(self._action_list)],
-                dtype=tf.bool,
-                name='available_actions'
-            )
-        )
-
-        # hp and shield categories that are optional
-        if self._config['env']['use_hp_log_values'] or self._config['env']['use_hp_cats']:
-            state_placeholder['screen_unit_hit_points'] = tf.placeholder(
-                shape=screen_shape,
-                dtype=tf.int32,
-                name='screen_unit_hit_points'
-            )
-        if self._config['env']['use_shield_log_values'] or self._config['env']['use_shield_cats']:
-            state_placeholder['screen_unit_shields'] = tf.placeholder(
-                shape=screen_shape,
-                dtype=tf.int32,
-                name='screen_unit_shields'
-            )
-
-        if self._config['env']['use_hp_ratios']:
-            state_placeholder['screen_unit_hit_points_ratio'] = tf.placeholder(
-                shape=screen_shape,
-                dtype=tf.int32,
-                name='screen_unit_hit_points_ratio'
-            )
-        if self._config['env']['use_shield_ratios']:
-            state_placeholder['screen_unit_shields_ratio'] = tf.placeholder(
-                shape=screen_shape,
-                dtype=tf.int32,
-                name='screen_unit_shields_ratio'
-            )
-
-        # unit types are optional
-        if self._config['env']['use_all_unit_types'] or self._config['env']['use_specific_unit_types']:
-            state_placeholder['screen_unit_type'] =tf.placeholder(
-                shape=screen_shape,
-                dtype=tf.int32,
-                name='screen_unit_type'
-            )
-
-        return state_placeholder
-
-    def _get_argument_masks(self):
-        masks = dict(function=tf.constant([1] * len(self._action_list), dtype=tf.float32, name='function'))
-
-        for arg_type in pysc2_actions.TYPES:
-            if self._action_components[arg_type.name]:
-                mask = []
-                for func in pysc2_actions.FUNCTIONS:
-                    if int(func.id) not in self._action_list:
-                        continue
-                    found = False
-                    for arg in func.args:
-                        if arg_type.name == arg.name:
-                            found = True
-                    if found:
-                        mask.append(1)
-                    else:
-                        mask.append(0)
-                masks[arg_type.name] = tf.constant(mask, dtype=tf.float32, name=arg_type.name)
-
-        return masks
-
-    def _get_num_options_per_function(self):
-        screen_size = self._config['env']['screen_size']
-        minimap_size = self._config['env']['minimap_size']
-        # this is hopefully the only place this has to be hard coded
-        return dict(
-            function=len(self._action_list),
-            screen=screen_size ** 2,
-            minimap=minimap_size ** 2,
-            screen2=screen_size ** 2,
-            queued=2,
-            control_group_act=5,
-            control_group_id=self._num_control_groups,
-            select_point_act=4,
-            select_add=2,
-            select_unit_act=4,
-            select_unit_id=500,
-            select_worker=4,
-            build_queue_id=10,
-            unload_id=500
-        )
-
-    def _get_action_one_hot(self, actions):
-        # action components we are using.
-        comp = self._action_components
-        # number of options for function args hard coded here... probably won't change in pysc2
-        num_options = self._get_num_options_per_function()
-
-        action_one_hot = {}
-        for name, using in comp.items():
-            if using:
-                action_one_hot[name] = tf.one_hot(actions[name], num_options[name], 1.0, 0.0, name=name)
-
-        return action_one_hot
-
     def _define_model(self):
         # placeholders for (s, a, s', r, terminal)
         with tf.variable_scope('states_placeholders'):
-            self._states = self._get_state_placeholder()
+            self._states = pysc2_common_net_funcs.get_state_placeholder(self._config)
         with tf.variable_scope('action_placeholders'):
             self._actions = {}
             for name, using in self._action_components.items():
                 if using:
                     self._actions[name] = tf.placeholder(shape=[None, ], dtype=tf.int32, name=name)
         with tf.variable_scope('next_states_placeholders'):
-            self._next_states = self._get_state_placeholder()
+            self._next_states = pysc2_common_net_funcs.get_state_placeholder(self._config)
         self._rewards = tf.placeholder(shape=[None, ], dtype=tf.float32, name='reward_placeholder')
         self._terminal = tf.placeholder(shape=[None, ], dtype=tf.float32, name='terminal_placeholder')
         self._per_weights = tf.placeholder(shape=[None, ], dtype=tf.float32, name='per_weights_placeholder')
@@ -485,11 +262,11 @@ class SC2Network:
 
         # one hot the actions from experiences
         with tf.variable_scope('action_one_hot'):
-            action_one_hot = self._get_action_one_hot(self._actions)
+            action_one_hot = pysc2_common_net_funcs.get_action_one_hot(self._actions, self._config)
 
         # these mask out the arguments that aren't used for the selected function from the loss calculation
         with tf.variable_scope('argument_masks'):
-            argument_masks = self._get_argument_masks()
+            argument_masks = pysc2_common_net_funcs.get_argument_masks(self._config)
             # y_masks = {}
             # for name in self._actions_next:
             #     y_masks[name] = tf.reduce_max(next_states_action_one_hot['function'] * argument_masks[name], axis=-1)
@@ -504,13 +281,13 @@ class SC2Network:
         with tf.variable_scope('next_states_action_one_hot'):
             if self._config['double_DQN']:
                 # in DDQN, actions have been chosen by primary network in a previous pass
-                next_states_action_one_hot = self._get_action_one_hot(self._actions_next)
+                next_states_action_one_hot = pysc2_common_net_funcs.get_action_one_hot(self._actions_next, self._config)
             else:
                 # in DQN, choosing actions based on target network qvals for next states
                 actions_next = {}
                 for name, q_vals in self._q_target.items():
                     actions_next[name] = tf.argmax(q_vals, axis=1)
-                next_states_action_one_hot = self._get_action_one_hot(actions_next)
+                next_states_action_one_hot = pysc2_common_net_funcs.get_action_one_hot(actions_next, self._config)
 
         # target Q(s,a)
         with tf.variable_scope('y'):
@@ -653,7 +430,7 @@ class SC2Network:
             predict_actions = {}
             for name, q_vals in self._q.items():
                 predict_actions[name] = tf.argmax(q_vals, axis=1)
-            predict_action_one_hot = self._get_action_one_hot(predict_actions)
+            predict_action_one_hot = pysc2_common_net_funcs.get_action_one_hot(predict_actions, self._config)
             predict_q_vals = []
             count = tf.Variable(tf.zeros([], dtype=np.float32), trainable=False)
             for name, q_vals in self._q.items():

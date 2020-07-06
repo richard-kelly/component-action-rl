@@ -1,0 +1,131 @@
+{
+    "use_batch": false,
+    "batch_file": "batch.json",
+    "batch_runs": 5,
+    "copy_model_from": "",
+    "inference_only": false,
+    "inference_only_realtime": false,
+    "inference_only_epsilon": 0,
+    "inference_only_episodes": 1000,
+
+    "use_scripted_bot": "",
+
+    "model_dir": "models/july_6_ac_4m_4batch_300k",
+    "model_checkpoint_frequency": 100000,
+    "model_checkpoint_max": 1,
+    "model_checkpoint_every_n_hours": 24,
+    "max_steps":3e5,
+    "max_episodes": 0,
+
+    "step_penalty": 0,
+    "episode_extra_win_reward": 0,
+
+    "learning_rate": 1e-3,
+    "learning_rate_decay_method": "none",
+    "learning_rate_decay_steps": 200000,
+    "learning_rate_decay_param": 1.0,
+
+    "bootstrapping_steps_NOT_USING": 1,
+    "discount": 0.99,
+    "batch_size": 4,
+    "reg_type": "l2",
+    "reg_scale": 1e-3,
+
+    "do_eval_episodes": false,
+    "train_on_eval_episodes": false,
+    "one_eval_episode_per": 10,
+
+    "debug_logging": false,
+    "log_frequency": 200,
+
+    "network_structure": {
+        "shared_actor_critic_net": true,
+        "shared_ac_network": [
+            [
+                {"type": "conv_act_bn", "filters": 16, "kernel_size": 7},
+                {"type": "conv_act_bn", "filters": 16, "kernel_size": 5},
+                {"type": "conv_act_bn", "filters": 16, "kernel_size": 3}
+            ],
+            [
+                {"type": "conv_act_bn", "filters": 32, "kernel_size": 5},
+                {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}
+            ],
+            [
+                {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}
+            ]
+        ],
+        "critic_network": [
+            {"type": "max_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
+            "flatten",
+            256,
+            256
+        ],
+        "shared_spatial_network": [],
+        "shared_non_spatial_network": [
+            {"type": "max_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
+            "flatten",
+            256,
+            256
+        ],
+        "component_stream_default": [],
+        "component_stream_specs": {
+            "function": [],
+            "screen": ["concat_extra", {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}, {"type": "conv", "filters": 1, "kernel_size": 1}],
+            "screen2": [
+                [
+                    {"type": "serial", "spec": [
+                        "concat_extra",
+                        {"type": "conv_act_bn", "filters": 1, "kernel_size": 84}
+                    ]},
+                    {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}
+                ],
+                {"type": "conv_act_bn", "filters": 32, "kernel_size": 3},
+                {"type": "conv", "filters": 1, "kernel_size": 1}
+            ]
+        },
+        "end_spatial_streams_with_dense_instead_of_flatten": false,
+        "use_stream_outputs_as_inputs_to_other_streams": true,
+        "stream_dependencies": {
+            "screen": ["function"],
+            "screen2": ["screen"]
+        },
+        "default_activation": "relu",
+        "scale_gradients_at_shared_ac_split": true,
+        "scale_gradients_at_shared_spatial_split": false,
+        "scale_gradients_at_shared_non_spatial_split": true,
+        "use_histograms": false
+    },
+
+    "env": {
+        "screen_size": 84,
+        "minimap_size": 84,
+        "map_name": "combat_4m_LTD2_on_damage_norm_factor_1000",
+        "visualize": true,
+        "step_mul": 8,
+        "action_functions": [
+            {
+                "reason": "no_op, select_rect, select_army, attack_screen, move_screen",
+                "type": "include_list",
+                "list": [0, 3, 7, 12, 331],
+                "orig": [0, 3, 7, 12, 331],
+                "attack_only": [12]
+            }
+        ],
+        "use_screen2": true,
+        "use_queue": false,
+        "use_select_add": false,
+        "select_rect_half_size": 20,
+        "use_all_unit_types": false,
+        "use_specific_unit_types": false,
+        "specific_unit_types": ["Marine", "Stalker"],
+
+        "use_hp_log_values": false,
+        "use_shield_log_values": false,
+        "use_hp_ratios": false,
+        "use_shield_ratios": false,
+        "use_hp_cats": true,
+        "hp_cats_values": [15, 30],
+        "use_shield_cats": false,
+        "shield_cats_values": [15, 30, 50, 100]
+    }
+}
