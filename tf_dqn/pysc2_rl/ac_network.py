@@ -127,7 +127,7 @@ class ACNetwork:
             # create each component stream
             component_streams = {}
             # final q vals with value added
-            action_q_vals = {}
+            action_probs = {}
             # action choices
             action_choices = {}
             # if another stream requires the output of another stream
@@ -166,8 +166,7 @@ class ACNetwork:
                             # make a dense layer with width equal to number of possible actions
                             dense = tf.layers.Dense(
                                 num_options[c],
-                                name=c,
-                                activation=tf.nn.softmax
+                                name=c
                             )
                             component_streams[c] = dense(component_stream)
                             if self._use_histograms:
@@ -177,23 +176,21 @@ class ACNetwork:
                                 tf.summary.histogram(name + 'weights', weights)
                                 tf.summary.histogram(name + 'bias', bias)
                         else:
-                            # flatten a conv output and do softmax activation
+                            # flatten a conv output
                             component_streams[c] = tf.reshape(component_stream, [-1, num_options[c]], name=c)
-                            component_streams[c] = tf.nn.softmax(component_streams[c])
+                        action_probs[c] = tf.nn.softmax(component_streams[c])
                     if self._use_histograms:
                         tf.summary.histogram('advantage_' + c, component_streams[c])
-
-                    action_q_vals[c] = component_streams[c]
 
                     # filter out actions ('function') that are illegal for this state
                     if c == 'function':
                         with tf.variable_scope('available_actions_mask'):
                             # available actions mask; avoids using negative infinity, and is the right size
-                            all_nans = action_q_vals['function'] * np.NaN
-                            action_q_vals['function'] = tf.where(inputs['available_actions'], action_q_vals['function'], all_nans)
+                            all_nans = action_probs['function'] * np.NaN
+                            action_probs['function'] = tf.where(inputs['available_actions'], action_probs['function'], all_nans)
 
                     # same as np.random_choice() - chooses according to probabilities. Needs log probs.
-                    action_choices[c] = tf.multinomial(tf.log(action_q_vals[c]), 1)
+                    action_choices[c] = tf.multinomial(tf.log(action_probs[c]), 1)
                     action_choices[c] = tf.squeeze(action_choices[c], axis=-1)
 
                     if self._config['network_structure']['use_stream_outputs_as_inputs_to_other_streams']:
@@ -236,9 +233,8 @@ class ACNetwork:
         self._training = tf.placeholder(shape=[], dtype=tf.bool, name='training_placeholder')
 
         # actor and critic nets
-        self._action_probs, self._action_choices, self._value = self._get_networks(self._states, self._use_histograms)
-
-        # NEW CONTENT
+        with tf.variable_scope('networks', regularizer=self._regularizer):
+            self._action_logits, self._action_choices, self._value = self._get_networks(self._states, self._use_histograms)
 
         # one hot the actions from experiences
         with tf.variable_scope('action_one_hot'):
@@ -248,25 +244,40 @@ class ACNetwork:
         with tf.variable_scope('argument_masks'):
             argument_masks = pysc2_common_net_funcs.get_argument_masks(self._config)
 
-        # calc TD-error
-        with tf.variable_scope('critic_train'):
+        with tf.variable_scope('training'):
             critic_loss = tf.losses.huber_loss(self._value, self._td_targets)
-            critic_reg_loss = tf.losses.get_regularization_loss('shared_actor_critic_net|critic_net')
+            # critic_loss = tf.reduce_mean(tf.square(td_errors))
+            td_errors = self._td_targets - self._value
+            tf.summary.scalar('mean_td_error', tf.reduce_mean(td_errors))
             tf.summary.scalar('critic_loss', critic_loss)
-            tf.summary.scalar('critic_reg_loss', critic_reg_loss)
 
-        # calc actor error
-        with tf.variable_scope('actor_train'):
+            # calc actor error
             actor_losses = []
+            td_errors = tf.stop_gradient(td_errors)
+
             for name in self._actions:
                 # argument mask is scalar 1 if this argument is used for the transition action, 0 otherwise
                 argument_mask = tf.reduce_max(action_one_hot['function'] * argument_masks[name], axis=-1)
-                loss = argument_mask * tf.stop_gradient(critic_loss) * tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self._action_probs[name], labels=self._actions[name])
+                log_prob = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self._action_logits[name], labels=self._actions[name])
+                tf.summary.scalar('mean_actor_logprob_' + name, tf.reduce_mean(log_prob))
+                loss = argument_mask * td_errors * log_prob
                 actor_losses.append(loss)
-            actor_loss = tf.reduce_sum(tf.stack(actor_losses))
-            actor_reg_loss = tf.losses.get_regularization_loss('shared_actor_critic_net|actor_net')
+            # add up component log-probs
+            stacked = tf.stack(actor_losses, axis=1)
+            actor_loss_summed = tf.reduce_sum(stacked, axis=-1)
+            # take mean of losses across batch
+            actor_loss = tf.reduce_mean(actor_loss_summed)
             tf.summary.scalar('actor_loss', actor_loss)
-            tf.summary.scalar('actor_reg_loss', actor_reg_loss)
+
+            # regularization loss
+            shared_reg_loss = tf.losses.get_regularization_loss('networks/shared_actor_critic_net')
+            critic_reg_loss = tf.losses.get_regularization_loss('networks/critic_net')
+            actor_reg_loss = tf.losses.get_regularization_loss('networks/actor_net')
+            total_reg_loss = shared_reg_loss + critic_reg_loss + actor_reg_loss
+            # tf.summary.scalar('critic_reg_loss', critic_reg_loss)
+            # tf.summary.scalar('actor_reg_loss', actor_reg_loss)
+            # tf.summary.scalar('shared_reg_loss', shared_reg_loss)
+            tf.summary.scalar('reg_loss', total_reg_loss)
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._config['learning_rate_decay_method'] == 'exponential':
@@ -279,14 +290,16 @@ class ACNetwork:
         # must run this op to do batch norm
         self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
-        critic_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(critic_loss + critic_reg_loss)
-        actor_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(actor_loss + actor_reg_loss)
-        self._optimizers = tf.group([critic_optimizer, actor_optimizer, self._update_ops])
+        # critic_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(critic_loss + critic_reg_loss)
+        # actor_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(actor_loss + actor_reg_loss)
+        optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(actor_loss + critic_loss + total_reg_loss)
+        self._optimizers = tf.group([optimizer, self._update_ops])
+        # self._optimizers = tf.group([critic_optimizer, actor_optimizer, self._update_ops])
 
         # tensorboard summaries
-        self._train_summaries = tf.summary.merge_all(scope='critic_train|actor_train|actor_net/advantage')
+        self._train_summaries = tf.summary.merge_all(scope='training|networks/actor_net/advantage')
         if self._use_histograms:
-            self._weight_summaries = tf.summary.merge_all(scope='actor_net/.*_network|actor_net/.*_stream')
+            self._weight_summaries = tf.summary.merge_all(scope='networks/(actor_net/.*(_network|_stream)|shared_actor_critic_net|critic_net)')
 
         with tf.variable_scope('episode_summaries'):
             # score here might be a sparse win/loss +1/-1, or it might be a shaped reward signal

@@ -10,7 +10,7 @@
 
     "use_scripted_bot": "",
 
-    "model_dir": "models/july_6_ac_4m_4batch_300k",
+    "model_dir": "models/july_20_tests/6",
     "model_checkpoint_frequency": 100000,
     "model_checkpoint_max": 1,
     "model_checkpoint_every_n_hours": 24,
@@ -20,16 +20,16 @@
     "step_penalty": 0,
     "episode_extra_win_reward": 0,
 
-    "learning_rate": 1e-3,
+    "learning_rate": 1e-4,
     "learning_rate_decay_method": "none",
     "learning_rate_decay_steps": 200000,
     "learning_rate_decay_param": 1.0,
 
     "bootstrapping_steps_NOT_USING": 1,
     "discount": 0.99,
-    "batch_size": 4,
+    "batch_size": 1,
     "reg_type": "l2",
-    "reg_scale": 1e-3,
+    "reg_scale": 1e-5,
 
     "do_eval_episodes": false,
     "train_on_eval_episodes": false,
@@ -93,7 +93,7 @@
         "scale_gradients_at_shared_ac_split": true,
         "scale_gradients_at_shared_spatial_split": false,
         "scale_gradients_at_shared_non_spatial_split": true,
-        "use_histograms": false
+        "use_histograms": true
     },
 
     "env": {

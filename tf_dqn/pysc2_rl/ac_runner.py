@@ -45,6 +45,7 @@ def get_paths_of_models_in_dir(dir):
                 paths.append(dir)
     return paths
 
+
 def write_summary_file_header(file_path, run_variables=None):
     with open(file_path, 'a+') as f:
         params = []
