@@ -346,7 +346,7 @@ class SC2Network:
                     training_action_q_masked = training_action_q[name] * argument_mask
                     y_masked = y * argument_mask
                     # we compare the q value of each component to the target y; y is masked if training q is masked
-                    loss = tf.losses.huber_loss(training_action_q_masked, y_masked, weights=self._per_weights)
+                    loss = tf.losses.huber_loss(training_action_q_masked, y_masked, weights=self._per_weights * argument_mask)
                     td.append(tf.abs(training_action_q_masked - y_masked))
                     losses.append(loss)
             elif self._config['loss_formula'] == 'avg_y_compared_to_avg_prediction':
@@ -363,7 +363,7 @@ class SC2Network:
                     y_masked = tf.stop_gradient((self._rewards + y_components[name]) * argument_mask)
                     # we compare the q value of each component to the y value for the same component,
                     # regardless if that component is used in the y action
-                    loss = tf.losses.huber_loss(training_action_q_masked, y_masked, weights=self._per_weights)
+                    loss = tf.losses.huber_loss(training_action_q_masked, y_masked, weights=self._per_weights * argument_mask)
                     td.append(tf.abs(training_action_q_masked - y_masked))
                     losses.append(loss)
             training_losses = tf.reduce_sum(tf.stack(losses), name='training_losses')
