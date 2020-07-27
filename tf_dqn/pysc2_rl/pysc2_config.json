@@ -116,6 +116,7 @@
                 "list": [0, 3, 7, 12, 331]
             }
         ],
+        "use_screen": true,
         "use_screen2": true,
         "use_queue": false,
         "use_select_add": false,

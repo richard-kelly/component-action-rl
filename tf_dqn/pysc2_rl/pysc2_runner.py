@@ -148,29 +148,32 @@ def get_action_function(obs, action, config):
     pysc2_funcs = actions.FUNCTIONS
     for i in range(len(pysc2_funcs[func_id].args)):
         name = pysc2_funcs[func_id].args[i].name
-        # special case of func_id 3, select_rect, used only if 'screen2' isn't output by network
-        # just select a rectangle around the point given by 'screen'
-        if func_id == 3 and (name == 'screen' or name == 'screen2') and 'screen2' not in action:
+        if func_id == 3 and 'screen2' not in action and 'screen' in action:
+            # special case of func_id 3 (select_rect), only if 'screen2' isn't output by network but 'screen' is
+            # just select a rectangle around the point given by 'screen'
             x, y = get_screen_coords(action['screen'], screen_size)
             if name == 'screen':
                 args.append([max(x - half_rect, 0), max(y - half_rect, 0)])
             elif name == 'screen2':
                 args.append([min(x + half_rect, screen_size - 1), min(y + half_rect, screen_size - 1)])
-        else:
-            if name == 'screen':
-                x, y = get_screen_coords(action['screen'], screen_size)
-                args.append([x, y])
-            elif name == 'screen2':
-                x, y = get_screen_coords(action['screen2'], screen_size)
-                args.append([x, y])
-            elif name == 'minimap':
-                x, y = get_screen_coords(action['minimap'], screen_size)
-                args.append([x, y])
-            elif name not in action:
+        elif name not in action:
+            if name == 'screen' or name == 'screen2':
+                # neither screen or screen2 is output by network, use random coordinates
+                args.append([random.randrange(0, screen_size), random.randrange(0, screen_size)])
+            else:
                 # if network doesn't supply argument, uses first choice, which is usually default no modifier action
                 args.append([0])
-            else:
-                args.append([action[name]])
+        elif name == 'screen':
+            x, y = get_screen_coords(action['screen'], screen_size)
+            args.append([x, y])
+        elif name == 'screen2':
+            x, y = get_screen_coords(action['screen2'], screen_size)
+            args.append([x, y])
+        elif name == 'minimap':
+            x, y = get_screen_coords(action['minimap'], screen_size)
+            args.append([x, y])
+        else:
+            args.append([action[name]])
 
     if config['inference_only'] and config['inference_only_realtime']:
         print(pysc2_funcs[func_id].name, ':', args)
@@ -291,6 +294,8 @@ def process_config_env(config):
     # these are special and can be replaced with default values (or computed differently in case of screen2)
     if not config['env']['use_queue']:
         all_components['queued'] = False
+    if not config['env']['use_screen']:
+        all_components['screen'] = False
     if not config['env']['use_screen2']:
         all_components['screen2'] = False
     if not config['env']['use_select_add']:

@@ -59,7 +59,7 @@ class ACNetwork:
                 with tf.variable_scope('shared_ac_scale'):
                     # scale the gradients entering last shared layer, as in original Dueling DQN paper
                     scale = 1 / math.sqrt(2)
-                    shared_spatial_net = (1 - scale) * tf.stop_gradient(shared_ac) + scale * shared_ac
+                    shared_ac = (1 - scale) * tf.stop_gradient(shared_ac) + scale * shared_ac
             actor_input = shared_ac
             critic_input = shared_ac
 
@@ -245,7 +245,7 @@ class ACNetwork:
             argument_masks = pysc2_common_net_funcs.get_argument_masks(self._config)
 
         with tf.variable_scope('training'):
-            critic_loss = tf.losses.huber_loss(self._value, self._td_targets)
+            critic_loss = tf.losses.huber_loss(self._td_targets, self._value)
             # critic_loss = tf.reduce_mean(tf.square(td_errors))
             td_errors = self._td_targets - self._value
             tf.summary.scalar('mean_td_error', tf.reduce_mean(td_errors))
@@ -269,15 +269,16 @@ class ACNetwork:
             actor_loss = tf.reduce_mean(actor_loss_summed)
             tf.summary.scalar('actor_loss', actor_loss)
 
-            # regularization loss
-            shared_reg_loss = tf.losses.get_regularization_loss('networks/shared_actor_critic_net')
+            # regularization loss and tensorboard summaries
             critic_reg_loss = tf.losses.get_regularization_loss('networks/critic_net')
             actor_reg_loss = tf.losses.get_regularization_loss('networks/actor_net')
-            total_reg_loss = shared_reg_loss + critic_reg_loss + actor_reg_loss
-            # tf.summary.scalar('critic_reg_loss', critic_reg_loss)
-            # tf.summary.scalar('actor_reg_loss', actor_reg_loss)
-            # tf.summary.scalar('shared_reg_loss', shared_reg_loss)
-            tf.summary.scalar('reg_loss', total_reg_loss)
+            tf.summary.scalar('critic_reg_loss', critic_reg_loss)
+            tf.summary.scalar('actor_reg_loss', actor_reg_loss)
+            if self._config['network_structure']['shared_actor_critic_net']:
+                shared_reg_loss = tf.losses.get_regularization_loss('networks/shared_actor_critic_net')
+                total_reg_loss = shared_reg_loss + critic_reg_loss + actor_reg_loss
+                tf.summary.scalar('shared_reg_loss', shared_reg_loss)
+                tf.summary.scalar('reg_loss', total_reg_loss)
 
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._config['learning_rate_decay_method'] == 'exponential':
@@ -290,11 +291,13 @@ class ACNetwork:
         # must run this op to do batch norm
         self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
-        # critic_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(critic_loss + critic_reg_loss)
-        # actor_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(actor_loss + actor_reg_loss)
-        optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(actor_loss + critic_loss + total_reg_loss)
-        self._optimizers = tf.group([optimizer, self._update_ops])
-        # self._optimizers = tf.group([critic_optimizer, actor_optimizer, self._update_ops])
+        if self._config['network_structure']['shared_actor_critic_net']:
+            optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(actor_loss + critic_loss + total_reg_loss)
+            self._optimizers = tf.group([optimizer, self._update_ops])
+        else:
+            critic_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(critic_loss + critic_reg_loss)
+            actor_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(actor_loss + actor_reg_loss)
+            self._optimizers = tf.group([critic_optimizer, actor_optimizer, self._update_ops])
 
         # tensorboard summaries
         self._train_summaries = tf.summary.merge_all(scope='training|networks/actor_net/advantage')

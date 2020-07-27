@@ -27,9 +27,9 @@
 
     "bootstrapping_steps_NOT_USING": 1,
     "discount": 0.99,
-    "batch_size": 1,
+    "batch_size": 32,
     "reg_type": "l2",
-    "reg_scale": 1e-5,
+    "reg_scale": 0.0,
 
     "do_eval_episodes": false,
     "train_on_eval_episodes": false,
@@ -39,8 +39,22 @@
     "log_frequency": 200,
 
     "network_structure": {
-        "shared_actor_critic_net": true,
+        "shared_actor_critic_net": false,
         "shared_ac_network": [
+
+        ],
+        "critic_network": [
+            {"type": "conv_act_bn", "filters": 32, "kernel_size": 7},
+            {"type": "max_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
+            {"type": "conv_act_bn", "filters": 32, "kernel_size": 5},
+            {"type": "max_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
+            {"type": "conv_act_bn", "filters": 32, "kernel_size": 3},
+            {"type": "max_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
+            "flatten",
+            128,
+            128
+        ],
+        "shared_spatial_network": [
             [
                 {"type": "conv_act_bn", "filters": 16, "kernel_size": 7},
                 {"type": "conv_act_bn", "filters": 16, "kernel_size": 5},
@@ -54,13 +68,6 @@
                 {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}
             ]
         ],
-        "critic_network": [
-            {"type": "max_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
-            "flatten",
-            256,
-            256
-        ],
-        "shared_spatial_network": [],
         "shared_non_spatial_network": [
             {"type": "max_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
             "flatten",
@@ -111,7 +118,8 @@
                 "attack_only": [12]
             }
         ],
-        "use_screen2": true,
+        "use_screen": false,
+        "use_screen2": false,
         "use_queue": false,
         "use_select_add": false,
         "select_rect_half_size": 20,
