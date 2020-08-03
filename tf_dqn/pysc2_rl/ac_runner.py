@@ -325,6 +325,17 @@ def preprocess_state(obs, config):
     else:
         unit_types = None
 
+    buffs = obs.observation['feature_screen'].buffs
+    if 'use_buffs' in config['env'] and config['env']['use_buffs']:
+        modified_buffs = np.zeros(buffs.shape, dtype=np.int32)
+        buff_ids = config['env']['buff_ids']
+        for i in range(len(buff_ids)):
+            # skip zero since that is the default value representing no buffs
+            modified_buffs[buffs == buff_ids[i]] = i + 1
+        buffs = modified_buffs
+    else:
+        buffs = None
+
     state = dict(
         screen_player_relative=obs.observation['feature_screen'].player_relative,
         screen_selected=obs.observation['feature_screen'].selected,
@@ -333,6 +344,8 @@ def preprocess_state(obs, config):
 
     if unit_types is not None:
         state['screen_unit_type'] = unit_types
+    if buffs is not None:
+        state['screen_buffs'] = buffs
 
     if config['env']['use_hp_log_values'] or config['env']['use_hp_cats']:
         state['screen_unit_hit_points'] = obs.observation['feature_screen'].unit_hit_points

@@ -134,6 +134,9 @@
         "use_hp_cats": true,
         "hp_cats_values": [15, 30],
         "use_shield_cats": false,
-        "shield_cats_values": [15, 30, 50, 100]
+        "shield_cats_values": [15, 30, 50, 100],
+        "use_buffs": false,
+        "buff_ids": [27],
+        "buff_list_NOT_USING": ["27_stimpacks"]
     }
 }

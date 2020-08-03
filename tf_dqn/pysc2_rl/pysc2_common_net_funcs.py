@@ -111,6 +111,14 @@ def preprocess_state_input(inputs, config):
             # above throws away first layer that has zeros
             to_concat.append(screen_unit_type)
 
+        if config['env']['use_buffs']:
+            screen_buffs = tf.contrib.layers.one_hot_encoding(
+                labels=inputs['screen_buffs'],
+                num_classes=len(config['env']['buff_ids'])
+            )[:, :, :, 1:]
+            # above throws away first layer that has zeros
+            to_concat.append(screen_buffs)
+
         screen = tf.concat(to_concat, axis=-1, name='screen_input')
         return screen
 
@@ -170,6 +178,14 @@ def get_state_placeholder(config):
             shape=screen_shape,
             dtype=tf.int32,
             name='screen_unit_type'
+        )
+
+    # buffs are optional
+    if config['env']['use_buffs']:
+        state_placeholder['screen_buffs'] =tf.placeholder(
+            shape=screen_shape,
+            dtype=tf.int32,
+            name='screen_buffs'
         )
 
     return state_placeholder
