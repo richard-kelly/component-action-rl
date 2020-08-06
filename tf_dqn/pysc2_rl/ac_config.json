@@ -20,7 +20,9 @@
     "step_penalty": 0,
     "episode_extra_win_reward": 0,
 
-    "learning_rate": 1e-4,
+    "shared_learning_rate": 1e-3,
+    "critic_learning_rate": 1e-5,
+    "actor_learning_rate": 1e-3,
     "learning_rate_decay_method": "none",
     "learning_rate_decay_steps": 200000,
     "learning_rate_decay_param": 1.0,

@@ -12,7 +12,6 @@ class ACNetwork:
             config
     ):
         self._config = config
-        self._learning_rate = config['learning_rate']
 
         if config['reg_type'] == 'l1':
             self._regularizer = tf.contrib.layers.l1_regularizer(scale=config['reg_scale'])
@@ -280,23 +279,32 @@ class ACNetwork:
                 tf.summary.scalar('shared_reg_loss', shared_reg_loss)
                 tf.summary.scalar('reg_loss', total_reg_loss)
 
+        shared_lr = self._config['shared_learning_rate']
+        actor_lr = self._config['actor_learning_rate']
+        critic_lr = self._config['critic_learning_rate']
         self._global_step = tf.placeholder(shape=[], dtype=tf.int32, name='global_step')
         if self._config['learning_rate_decay_method'] == 'exponential':
-            lr = tf.train.exponential_decay(self._learning_rate, self._global_step, self._config['learning_rate_decay_steps'], self._config['learning_rate_decay_param'])
+            if self._config['network_structure']['shared_actor_critic_net']:
+                shared_lr = tf.train.exponential_decay(self._config['shared_learning_rate'], self._global_step, self._config['learning_rate_decay_steps'], self._config['learning_rate_decay_param'])
+            else:
+                actor_lr = tf.train.exponential_decay(self._config['actor_learning_rate'], self._global_step, self._config['learning_rate_decay_steps'], self._config['learning_rate_decay_param'])
+                critic_lr = tf.train.exponential_decay(self._config['critic_learning_rate'], self._global_step, self._config['learning_rate_decay_steps'], self._config['learning_rate_decay_param'])
         elif self._config['learning_rate_decay_method'] == 'polynomial':
-            lr = tf.train.polynomial_decay(self._learning_rate, self._global_step, self._config['learning_rate_decay_steps'], self._config['learning_rate_decay_param'])
-        else:
-            lr = self._learning_rate
+            if self._config['network_structure']['shared_actor_critic_net']:
+                shared_lr = tf.train.polynomial_decay(self._config['shared_learning_rate'], self._global_step, self._config['learning_rate_decay_steps'], self._config['learning_rate_decay_param'])
+            else:
+                actor_lr = tf.train.polynomial_decay(self._config['actor_learning_rate'], self._global_step,                                                       self._config['learning_rate_decay_steps'], self._config['learning_rate_decay_param'])
+                critic_lr = tf.train.polynomial_decay(self._config['critic_learning_rate'], self._global_step,                                                       self._config['learning_rate_decay_steps'], self._config['learning_rate_decay_param'])
 
         # must run this op to do batch norm
         self._update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
         if self._config['network_structure']['shared_actor_critic_net']:
-            optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(actor_loss + critic_loss + total_reg_loss)
+            optimizer = tf.train.AdamOptimizer(learning_rate=shared_lr).minimize(actor_loss + critic_loss + total_reg_loss)
             self._optimizers = tf.group([optimizer, self._update_ops])
         else:
-            critic_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(critic_loss + critic_reg_loss)
-            actor_optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(actor_loss + actor_reg_loss)
+            critic_optimizer = tf.train.AdamOptimizer(learning_rate=critic_lr).minimize(critic_loss + critic_reg_loss)
+            actor_optimizer = tf.train.AdamOptimizer(learning_rate=actor_lr).minimize(actor_loss + actor_reg_loss)
             self._optimizers = tf.group([critic_optimizer, actor_optimizer, self._update_ops])
 
         # tensorboard summaries
