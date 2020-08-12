@@ -368,8 +368,10 @@ def preprocess_state(obs, config):
     return state
 
 
-def run_one_env(config, run_num=0, run_variables={}, rename_if_duplicate=False, output_file=None):
+def run_one_env(config, run_num=0, run_variables=None, rename_if_duplicate=False, output_file=None):
     # save a copy of the configuration file being used for a run in the run's folder (first time only)
+    if run_variables is None:
+        run_variables = {}
     restore = True
     if not os.path.exists(config['model_dir']):
         restore = False
