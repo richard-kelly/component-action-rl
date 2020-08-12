@@ -31,7 +31,9 @@
     "discount": 0.99,
     "batch_size": 32,
     "reg_type": "l2",
-    "reg_scale": 0.0,
+    "reg_scale": 1e-6,
+    "critic_reg_scale": 1e-6,
+    "actor_reg_scale": 1e-6,
 
     "do_eval_episodes": false,
     "train_on_eval_episodes": false,

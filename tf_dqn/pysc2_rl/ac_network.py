@@ -13,10 +13,18 @@ class ACNetwork:
     ):
         self._config = config
 
-        if config['reg_type'] == 'l1':
-            self._regularizer = tf.contrib.layers.l1_regularizer(scale=config['reg_scale'])
-        elif config['reg_type'] == 'l2':
-            self._regularizer = tf.contrib.layers.l2_regularizer(scale=config['reg_scale'])
+        if config['network_structure']['shared_actor_critic_net']:
+            if config['reg_type'] == 'l1':
+                self._regularizer = tf.contrib.layers.l1_regularizer(scale=config['reg_scale'])
+            elif config['reg_type'] == 'l2':
+                self._regularizer = tf.contrib.layers.l2_regularizer(scale=config['reg_scale'])
+        else:
+            if config['reg_type'] == 'l1':
+                self._actor_regularizer = tf.contrib.layers.l1_regularizer(scale=config['actor_reg_scale'])
+                self._critic_regularizer = tf.contrib.layers.l1_regularizer(scale=config['critic_reg_scale'])
+            elif config['reg_type'] == 'l2':
+                self._actor_regularizer = tf.contrib.layers.l2_regularizer(scale=config['actor_reg_scale'])
+                self._critic_regularizer = tf.contrib.layers.l2_regularizer(scale=config['critic_reg_scale'])
 
         # these are computed at runtime (in pysc2_runner.py), and not manually set in the config
         self._action_components = config['env']['computed_action_components']
@@ -63,7 +71,10 @@ class ACNetwork:
             critic_input = shared_ac
 
         # critic net
-        with tf.variable_scope('critic_net'):
+        reg = None
+        if not self._config['network_structure']['shared_actor_critic_net']:
+            reg = self._critic_regularizer
+        with tf.variable_scope('critic_net', regularizer=reg):
             fc_critic = network_utils.get_layers(
                 critic_input,
                 self._config['network_structure']['critic_network'],
@@ -81,7 +92,10 @@ class ACNetwork:
             value = tf.squeeze(value, axis=-1)
 
         # actor net
-        with tf.variable_scope('actor_net'):
+        reg = None
+        if not self._config['network_structure']['shared_actor_critic_net']:
+            reg = self._actor_regularizer
+        with tf.variable_scope('actor_net', regularizer=reg):
             with tf.variable_scope('shared_spatial_network'):
                 shared_spatial_net = network_utils.get_layers(
                     actor_input,
@@ -232,7 +246,10 @@ class ACNetwork:
         self._training = tf.placeholder(shape=[], dtype=tf.bool, name='training_placeholder')
 
         # actor and critic nets
-        with tf.variable_scope('networks', regularizer=self._regularizer):
+        reg = None
+        if self._config['network_structure']['shared_actor_critic_net']:
+            reg = self._regularizer
+        with tf.variable_scope('networks', regularizer=reg):
             self._action_logits, self._action_choices, self._value = self._get_networks(self._states, self._use_histograms)
 
         # one hot the actions from experiences
