@@ -294,7 +294,7 @@ def process_config_env(config):
     # these are special and can be replaced with default values (or computed differently in case of screen2)
     if not config['env']['use_queue']:
         all_components['queued'] = False
-    if not config['env']['use_screen']:
+    if ['use_screen'] in config['env'] and not config['env']['use_screen']:
         all_components['screen'] = False
     if not config['env']['use_screen2']:
         all_components['screen2'] = False
