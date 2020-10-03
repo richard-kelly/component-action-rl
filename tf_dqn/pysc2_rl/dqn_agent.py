@@ -111,7 +111,7 @@ class DQNAgent:
             else:
                 self._average_episode_score = (self._average_episode_score * self._episodes + self._episode_score) / (self._episodes + 1)
                 self._average_episode_win = (self._average_episode_win * self._episodes + win) / (self._episodes + 1)
-                epsilon = self._epsilon if self._memory_start_size_reached else 1.0
+                epsilon = self._epsilon
                 epsilon = epsilon if not self._config['inference_only'] else self._config['inference_only_epsilon']
                 summary = self._network.episode_summary(
                     self._sess,
@@ -196,7 +196,7 @@ class DQNAgent:
 
         # use epsilon set in config if doing inference only, otherwise use calculated current epsilon
         epsilon = self._config['inference_only_epsilon'] if self._config['inference_only'] else self._epsilon
-        if not force_inference and (not self._memory_start_size_reached or random.random() < epsilon):
+        if not force_inference and random.random() < epsilon:
             # take a random action
             if self._sample_action is None:
                 # store one action to serve as action specification
