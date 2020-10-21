@@ -238,28 +238,14 @@ def process_config_post_batch(config):
 def process_config_env(config):
     config['env']['computed_action_list'] = compute_action_list(config['env']['action_functions'])
 
-    # modify the list of computed actions based on the map name for maps that pre-select units or have control groups pre-assigned
-    preselected = False
+    # modify the list of computed actions based on the map name for maps that have control groups pre-assigned
     num_groups = 0
-    match = re.search(r"select_all", config['env']['map_name'])
-    if match:
-        # all units are pre-selected, no groups
-        preselected = True
-    match = re.search(r"select_(\d+)", config['env']['map_name'])
+    match = re.search(r"control_(\d+)", config['env']['map_name'])
     if match:
         num_groups = int(match.group(1))
 
-    if preselected or num_groups > 0:
-        # remove all selection functions
-        select_functions = [2, 3, 4, 5, 6, 7, 8, 9]
-        to_remove = []
-        for func in config['env']['computed_action_list']:
-            if func in select_functions:
-                to_remove.append(func)
-        for func in to_remove:
-            config['env']['computed_action_list'].remove(func)
     if num_groups > 0:
-        # if we have preselected groups, add back in control groups
+        # if we have preselected groups, add in control groups
         control_group_func_id = 4
         config['env']['computed_action_list'].append(control_group_func_id)
         # only select the pre-existing control groups
@@ -701,7 +687,7 @@ def main():
             # eval mode
             # in case we forgot to set the inference options
             base_config['inference_only'] = True
-            base_config['inference_only_realtime'] = False
+            # base_config['inference_only_realtime'] = False
 
             with open(base_config['model_dir'] + '/config.json', 'w+') as fp:
                 fp.write(json.dumps(base_config, indent=4))
