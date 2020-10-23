@@ -657,7 +657,7 @@ def main():
                 for prop in new_config:
                     if prop == 'model_dir':
                         found_model_name = True
-                    if type(prop) is dict:
+                    if type(new_config[prop]) is dict:
                         # instead of making this a recursive function, this should be fine for now
                         for sub_prop in new_config[prop]:
                             model_config[prop][sub_prop] = new_config[prop][sub_prop]
