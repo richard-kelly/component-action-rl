@@ -93,6 +93,18 @@ def preprocess_state_input(inputs, config):
                 )
             to_concat.append(tf.expand_dims(tf.where(sh > vals[-1], ones, zeros), axis=-1))
 
+        if 'use_combined_hp_shields' in config['env'] and config['env']['use_combined_hp_shields']:
+            ones = tf.ones(tf.shape(inputs['screen_unit_hit_points_shields_combined']))
+            zeros = tf.zeros(tf.shape(inputs['screen_unit_hit_points_shields_combined']))
+            hp_sh = inputs['screen_unit_hit_points_shields_combined']
+            vals = config['env']['combined_hp_shield_cats']
+            to_concat.append(tf.expand_dims(tf.where(hp_sh <= vals[0], ones, zeros), axis=-1))
+            for i in range(1, len(vals)):
+                to_concat.append(
+                    tf.expand_dims(tf.where(tf.logical_and(hp_sh > vals[i - 1], hp_sh <= vals[i]), ones, zeros), axis=-1)
+                )
+            to_concat.append(tf.expand_dims(tf.where(hp_sh > vals[-1], ones, zeros), axis=-1))
+
         if config['env']['use_all_unit_types']:
             # pysc2 has a list of known unit types, and the max unit id is around 2000 but there are 259 units (v3.0)
             # 4th root of 259 is ~4 (Google rule of thumb for ratio of embedding dimensions to number of categories)
@@ -157,6 +169,12 @@ def get_state_placeholder(config):
             shape=screen_shape,
             dtype=tf.int32,
             name='screen_unit_shields'
+        )
+    if 'use_combined_hp_shields' in config['env'] and config['env']['use_combined_hp_shields']:
+        state_placeholder['screen_unit_hit_points_shields_combined'] = tf.placeholder(
+            shape=screen_shape,
+            dtype=tf.int32,
+            name='screen_unit_hit_points_shields_combined'
         )
 
     if config['env']['use_hp_ratios']:
