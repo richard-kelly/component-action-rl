@@ -1,11 +1,8 @@
 import tensorflow as tf
-import numpy as np
-import math
-import random
 import time
 
-from tf_dqn.pysc2_rl.ac_network import ACNetwork
-from tf_dqn.common.ac_mem import ACMemory
+from pysc2_rl.ac_network import ACNetwork
+from common.ac_mem import ACMemory
 
 
 class ACAgent:

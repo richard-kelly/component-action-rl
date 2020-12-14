@@ -2,7 +2,7 @@ import numpy as np
 import random
 import math
 
-from tf_dqn.common import utils
+from common import utils
 
 
 def get_num_options_per_function(config):

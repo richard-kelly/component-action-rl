@@ -16,15 +16,15 @@ from pysc2.lib import units
 from pysc2.env.environment import StepType
 from pysc2.env import sc2_env
 
-from tf_dqn.pysc2_rl.ac_agent import ACAgent
-from tf_dqn.common import utils
-from tf_dqn.pysc2_rl import scripted_bots
+from pysc2_rl.dqn_agent import DQNAgent
+from common import utils
+from pysc2_rl import scripted_bots
 
 # suppress warning messages
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 # Isn't used here, but allows pysc2 to use the maps
-from tf_dqn.pysc2_rl.maps import CombatMaps
+from maps import CombatMaps
 
 # Needed to satisfy something in pysc2, though I'm not actually using the flags
 FLAGS = flags.FLAGS
@@ -44,7 +44,6 @@ def get_paths_of_models_in_dir(dir):
             elif file == 'checkpoint':
                 paths.append(dir)
     return paths
-
 
 def write_summary_file_header(file_path, run_variables=None):
     with open(file_path, 'a+') as f:
@@ -225,32 +224,28 @@ def compute_action_list(rules):
     return computed
 
 
+def process_config_post_batch(config):
+    # some values can be overridden to be based on number of steps (but not if number of steps is unset)
+    if config['match_per_beta_anneal_steps_to_max'] and config['max_steps'] > 0:
+        config['per_beta_anneal_steps'] = int(config['max_steps'] * config['match_per_beta_anneal_steps_ratio'])
+    if config['match_epsilon_decay_steps_to_max'] and config['max_steps'] > 0:
+        config['decay_steps'] = int(config['max_steps'] * config['match_epsilon_decay_steps_ratio'])
+
+    return config
+
+
 # Add some extra properties to the config['env'] section that will be used by the Network
 def process_config_env(config):
     config['env']['computed_action_list'] = compute_action_list(config['env']['action_functions'])
 
-    # modify the list of computed actions based on the map name for maps that pre-select units or have control groups pre-assigned
-    preselected = False
+    # modify the list of computed actions based on the map name for maps that have control groups pre-assigned
     num_groups = 0
-    match = re.search(r"select_all", config['env']['map_name'])
-    if match:
-        # all units are pre-selected, no groups
-        preselected = True
-    match = re.search(r"select_(\d+)", config['env']['map_name'])
+    match = re.search(r"control_(\d+)", config['env']['map_name'])
     if match:
         num_groups = int(match.group(1))
 
-    if preselected or num_groups > 0:
-        # remove all selection functions
-        select_functions = [2, 3, 4, 5, 6, 7, 8, 9]
-        to_remove = []
-        for func in config['env']['computed_action_list']:
-            if func in select_functions:
-                to_remove.append(func)
-        for func in to_remove:
-            config['env']['computed_action_list'].remove(func)
     if num_groups > 0:
-        # if we have preselected groups, add back in control groups
+        # if we have preselected groups, add in control groups
         control_group_func_id = 4
         config['env']['computed_action_list'].append(control_group_func_id)
         # only select the pre-existing control groups
@@ -285,7 +280,7 @@ def process_config_env(config):
     # these are special and can be replaced with default values (or computed differently in case of screen2)
     if not config['env']['use_queue']:
         all_components['queued'] = False
-    if not config['env']['use_screen']:
+    if 'use_screen' in config['env'] and not config['env']['use_screen']:
         all_components['screen'] = False
     if not config['env']['use_screen2']:
         all_components['screen2'] = False
@@ -347,6 +342,8 @@ def preprocess_state(obs, config):
     if buffs is not None:
         state['screen_buffs'] = buffs
 
+    if 'use_combined_hp_shields' in config['env'] and config['env']['use_combined_hp_shields']:
+        state['screen_unit_hit_points_shields_combined'] = obs.observation['feature_screen'].unit_hit_points + obs.observation['feature_screen'].unit_shields
     if config['env']['use_hp_log_values'] or config['env']['use_hp_cats']:
         state['screen_unit_hit_points'] = obs.observation['feature_screen'].unit_hit_points
     if config['env']['use_shield_log_values'] or config['env']['use_shield_cats']:
@@ -421,9 +418,9 @@ def run_one_env(config, run_num=0, run_variables=None, rename_if_duplicate=False
                 elif config['use_scripted_bot'] == 'attack_weakest_nearest':
                     rl_agent = scripted_bots.AttackWeakestNearestBot(config)
                 else:
-                    rl_agent = ACAgent(sess, config, restore)
+                    rl_agent = DQNAgent(sess, config, restore)
             else:
-                rl_agent = ACAgent(sess, config, restore)
+                rl_agent = DQNAgent(sess, config, restore)
             # observations from the env are tuples of 1 Timestep per player
             obs = env.reset()[0]
             step = 0
@@ -586,7 +583,7 @@ def run_one_env(config, run_num=0, run_variables=None, rename_if_duplicate=False
 
 def main():
     # load configuration
-    config_paths = ['ac_config.json']
+    config_paths = ['pysc2_config.json']
     eval_dir_mode = False
     write_experiment_summary = False
     if len(sys.argv) > 1:
@@ -609,7 +606,7 @@ def main():
             config_paths = [sys.argv[1]]
 
     # use one config as a 'base' to allow other configs to be smaller
-    with open('ac_config.json', 'r') as fp:
+    with open('pysc2_config.json', 'r') as fp:
         base_config = json.load(fp=fp)
 
     if write_experiment_summary:
@@ -662,7 +659,7 @@ def main():
                 for prop in new_config:
                     if prop == 'model_dir':
                         found_model_name = True
-                    if type(prop) is dict:
+                    if type(new_config[prop]) is dict:
                         # instead of making this a recursive function, this should be fine for now
                         for sub_prop in new_config[prop]:
                             model_config[prop][sub_prop] = new_config[prop][sub_prop]
@@ -692,7 +689,7 @@ def main():
             # eval mode
             # in case we forgot to set the inference options
             base_config['inference_only'] = True
-            base_config['inference_only_realtime'] = False
+            # base_config['inference_only_realtime'] = False
 
             with open(base_config['model_dir'] + '/config.json', 'w+') as fp:
                 fp.write(json.dumps(base_config, indent=4))
@@ -802,10 +799,13 @@ def main():
                     name += '_' + param + '_' + str(new_val)
                 config['model_dir'] = base_name + '/' + name
 
+                # some things need to be adjusted after the batch variables are altered
+                config = process_config_post_batch(config)
                 print('****** Starting a new run in this batch: ' + name + ' ******')
                 run_one_env(config, count, run_variables, rename_if_duplicate=True, output_file=summary_file_name)
         else:
             print('SINGLE RUN MODE')
+            config = process_config_post_batch(config)
             run_one_env(config, rename_if_duplicate=False)
 
 

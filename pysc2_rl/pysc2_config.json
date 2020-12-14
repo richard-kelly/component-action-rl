@@ -1,20 +1,20 @@
 {
-    "use_batch": true,
+    "use_batch": false,
     "batch_file": "batch.json",
-    "batch_runs": 20,
+    "batch_runs": 5,
     "copy_model_from": "",
     "inference_only": false,
     "inference_only_realtime": false,
     "inference_only_epsilon": 0,
-    "inference_only_episodes": 100,
+    "inference_only_episodes": 1000,
 
     "use_scripted_bot": "",
 
-    "model_dir": "models/test18",
+    "model_dir": "models/nov_23_test",
     "model_checkpoint_frequency": 100000,
     "model_checkpoint_max": 1,
     "model_checkpoint_every_n_hours": 24,
-    "max_steps": 250000,
+    "max_steps":1e5,
     "max_episodes": 0,
 
     "step_penalty": 0,
@@ -22,7 +22,7 @@
 
     "learning_rate": 1e-3,
     "learning_rate_decay_method": "none",
-    "learning_rate_decay_steps": 10000,
+    "learning_rate_decay_steps": 200000,
     "learning_rate_decay_param": 1.0,
 
     "double_DQN": true,
@@ -33,7 +33,7 @@
     "reg_type": "l2",
     "reg_scale": 1e-3,
 
-    "do_eval_episodes": true,
+    "do_eval_episodes": false,
     "train_on_eval_episodes": false,
     "one_eval_episode_per": 10,
 
@@ -45,42 +45,51 @@
     ],
 
     "update_frequency": 4,
-    "memory_size": 60000,
-    "memory_burn_in": 10000,
+    "memory_size": 30000,
+    "memory_burn_in": 10,
     "target_update_frequency": 10000,
 
     "use_priority_experience_replay": true,
     "per_alpha": 0.6,
     "per_starting_beta": 0.4,
-    "per_beta_anneal_steps": 250000,
+    "per_beta_anneal_steps": 2e6,
     "match_per_beta_anneal_steps_to_max": true,
     "match_per_beta_anneal_steps_ratio": 1.0,
     "avg_component_tds": true,
 
     "initial_epsilon": 1.0,
-    "final_epsilon": 0.1,
-    "decay_steps": 150000,
-    "decay_type": "linear",
+    "final_epsilon": 0.05,
+    "decay_steps": 4e5,
+    "decay_type": "exponential",
     "match_epsilon_decay_steps_to_max": true,
-    "match_epsilon_decay_steps_ratio": 0.75,
+    "match_epsilon_decay_steps_ratio": 0.8,
 
     "debug_logging": false,
     "log_frequency": 200,
 
     "network_structure": {
         "shared_spatial_network": [
-            {"type": "conv", "filters": 16, "kernel_size": 7},
-            {"type": "conv", "filters": 32, "kernel_size": 5},
-            {"type": "conv", "filters": 64, "kernel_size": 3}
+            [
+                {"type": "conv_act_bn", "filters": 16, "kernel_size": 7},
+                {"type": "conv_act_bn", "filters": 16, "kernel_size": 5},
+                {"type": "conv_act_bn", "filters": 16, "kernel_size": 3}
+            ],
+            [
+                {"type": "conv_act_bn", "filters": 32, "kernel_size": 5},
+                {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}
+            ],
+            [
+                {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}
+            ]
         ],
         "value_network": [
-            {"type": "avg_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
+            {"type": "max_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
             "flatten",
             256,
             256
         ],
         "shared_non_spatial_network": [
-            {"type": "avg_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
+            {"type": "max_pool", "pool_size": 3, "strides": 3, "padding": "valid"},
             "flatten",
             256,
             256
@@ -88,11 +97,21 @@
         "component_stream_default": [],
         "component_stream_specs": {
             "function": [],
-            "screen": [{"type": "conv", "filters": 1, "kernel_size": 1}],
-            "screen2": [{"type": "conv", "filters": 1, "kernel_size": 1}]
+            "screen": ["concat_extra", {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}, {"type": "conv", "filters": 1, "kernel_size": 1}],
+            "screen2": [
+                [
+                    {"type": "serial", "spec": [
+                        "concat_extra",
+                        {"type": "conv_act_bn", "filters": 1, "kernel_size": 84}
+                    ]},
+                    {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}
+                ],
+                {"type": "conv_act_bn", "filters": 32, "kernel_size": 3},
+                {"type": "conv", "filters": 1, "kernel_size": 1}
+            ]
         },
         "end_spatial_streams_with_dense_instead_of_flatten": false,
-        "use_stream_outputs_as_inputs_to_other_streams": false,
+        "use_stream_outputs_as_inputs_to_other_streams": true,
         "stream_dependencies": {
             "screen": ["function"],
             "screen2": ["screen"]
@@ -100,20 +119,22 @@
         "default_activation": "relu",
         "scale_gradients_at_shared_spatial_split": true,
         "scale_gradients_at_shared_non_spatial_split": true,
-        "use_histograms": true
+        "use_histograms": false
     },
 
     "env": {
         "screen_size": 84,
         "minimap_size": 84,
-        "map_name": "combat_5m_LTD2_on_damage_norm_factor_1000",
-        "visualize": false,
+        "map_name": "combat_4s_LTD2S_on_damage_norm_factor_1000",
+        "visualize": true,
         "step_mul": 8,
         "action_functions": [
             {
                 "reason": "no_op, select_rect, select_army, attack_screen, move_screen",
                 "type": "include_list",
-                "list": [0, 3, 7, 12, 331]
+                "list": [0, 3, 7, 12, 331, 234],
+                "orig": [0, 3, 7, 12, 331],
+                "attack_only": [12]
             }
         ],
         "use_screen": true,
@@ -123,16 +144,15 @@
         "select_rect_half_size": 20,
         "use_all_unit_types": false,
         "use_specific_unit_types": false,
-        "specific_unit_types": ["Marine", "Stalker"],
-
+        "specific_unit_types": ["Zergling", "Hydralisk"],
         "use_hp_log_values": false,
         "use_shield_log_values": false,
         "use_hp_ratios": false,
         "use_shield_ratios": false,
         "use_hp_cats": true,
-        "hp_cats_values": [15, 30, 50, 100],
-        "use_shield_cats": true,
-        "shield_cats_values": [15, 30, 50, 100]
+        "hp_cats_values": [15, 30],
+        "use_shield_cats": false,
+        "shield_cats_values": [15, 30, 50, 100],
         "use_combined_hp_shields": false,
         "combined_hp_shield_cats": [55, 105],
         "use_buffs": false,

@@ -1,5 +1,5 @@
 import numpy as np
-from tf_dqn.common import utils
+from common import utils
 
 
 class ACMemory:

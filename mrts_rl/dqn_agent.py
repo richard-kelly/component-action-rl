@@ -5,10 +5,10 @@ import random
 import time
 import copy
 
-from tf_dqn.mrts_rl.mrts_abstraction_network import MRTSAbstractionNetwork
-from tf_dqn.mrts_rl.mrts_network import MRTSNetwork
-from tf_dqn.common.latest_replay_mem import LatestReplayMemory
-from tf_dqn.common.prioritized_replay_mem import PrioritizedReplayMemory
+from mrts_rl import MRTSAbstractionNetwork
+from mrts_rl import MRTSNetwork
+from common import LatestReplayMemory
+from common import PrioritizedReplayMemory
 
 
 class DQNAgent:

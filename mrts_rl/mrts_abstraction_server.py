@@ -8,8 +8,8 @@ import random
 import numpy as np
 import tensorflow as tf
 
-from tf_dqn.mrts_rl.dqn_agent import DQNAgent
-import tf_dqn.common.utils as utils
+from mrts_rl import DQNAgent
+import common.utils as utils
 
 HOST = '127.0.0.1'
 PORT = 9898

@@ -1,7 +1,7 @@
 import math
 import random
 import numpy as np
-from tf_dqn.common.latest_replay_mem import LatestReplayMemory
+from common.latest_replay_mem import LatestReplayMemory
 
 
 class PrioritizedReplayMemory(LatestReplayMemory):

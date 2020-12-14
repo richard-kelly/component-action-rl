@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import math
 
-from tf_dqn.common import network_utils
+import network_utils
 from . import pysc2_common_net_funcs
 
 
