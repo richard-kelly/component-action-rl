@@ -10,11 +10,11 @@
 
     "use_scripted_bot": "",
 
-    "model_dir": "models/nov_23_test",
+    "model_dir": "models/test",
     "model_checkpoint_frequency": 100000,
     "model_checkpoint_max": 1,
     "model_checkpoint_every_n_hours": 24,
-    "max_steps":1e5,
+    "max_steps":1e3,
     "max_episodes": 0,
 
     "step_penalty": 0,
@@ -38,28 +38,23 @@
     "one_eval_episode_per": 10,
 
     "loss_formula": "avg_y_compared_to_components",
-    "loss_formula_choices": [
-        "avg_y_compared_to_components",
-        "avg_y_compared_to_avg_prediction",
-        "pairwise_component_comparison"
-    ],
 
     "update_frequency": 4,
-    "memory_size": 30000,
-    "memory_burn_in": 10,
+    "memory_size": 60000,
+    "memory_burn_in": 10000,
     "target_update_frequency": 10000,
 
     "use_priority_experience_replay": true,
     "per_alpha": 0.6,
     "per_starting_beta": 0.4,
-    "per_beta_anneal_steps": 2e6,
+    "per_beta_anneal_steps": 3e5,
     "match_per_beta_anneal_steps_to_max": true,
     "match_per_beta_anneal_steps_ratio": 1.0,
     "avg_component_tds": true,
 
     "initial_epsilon": 1.0,
     "final_epsilon": 0.05,
-    "decay_steps": 4e5,
+    "decay_steps": 3e5,
     "decay_type": "exponential",
     "match_epsilon_decay_steps_to_max": true,
     "match_epsilon_decay_steps_ratio": 0.8,
@@ -97,21 +92,11 @@
         "component_stream_default": [],
         "component_stream_specs": {
             "function": [],
-            "screen": ["concat_extra", {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}, {"type": "conv", "filters": 1, "kernel_size": 1}],
-            "screen2": [
-                [
-                    {"type": "serial", "spec": [
-                        "concat_extra",
-                        {"type": "conv_act_bn", "filters": 1, "kernel_size": 84}
-                    ]},
-                    {"type": "conv_act_bn", "filters": 32, "kernel_size": 3}
-                ],
-                {"type": "conv_act_bn", "filters": 32, "kernel_size": 3},
-                {"type": "conv", "filters": 1, "kernel_size": 1}
-            ]
+            "screen": [{"type": "conv_act_bn", "filters": 32, "kernel_size": 3}, {"type": "conv", "filters": 1, "kernel_size": 1}],
+            "screen2": [{"type": "conv_act_bn", "filters": 32, "kernel_size": 3}, {"type": "conv", "filters": 1, "kernel_size": 1}]
         },
         "end_spatial_streams_with_dense_instead_of_flatten": false,
-        "use_stream_outputs_as_inputs_to_other_streams": true,
+        "use_stream_outputs_as_inputs_to_other_streams": false,
         "stream_dependencies": {
             "screen": ["function"],
             "screen2": ["screen"]
@@ -125,16 +110,14 @@
     "env": {
         "screen_size": 84,
         "minimap_size": 84,
-        "map_name": "combat_4s_LTD2S_on_damage_norm_factor_1000",
+        "map_name": "combat_8m_LTD2_on_damage_norm_factor_1000",
         "visualize": true,
         "step_mul": 8,
         "action_functions": [
             {
                 "reason": "no_op, select_rect, select_army, attack_screen, move_screen",
                 "type": "include_list",
-                "list": [0, 3, 7, 12, 331, 234],
-                "orig": [0, 3, 7, 12, 331],
-                "attack_only": [12]
+                "list": [0, 3, 7, 12, 331]
             }
         ],
         "use_screen": true,
@@ -156,7 +139,6 @@
         "use_combined_hp_shields": false,
         "combined_hp_shield_cats": [55, 105],
         "use_buffs": false,
-        "buff_ids": [27],
-        "buff_list_NOT_USING": ["27_stimpacks"]
+        "buff_ids": [27]
     }
 }
