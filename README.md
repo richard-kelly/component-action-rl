@@ -46,6 +46,7 @@ All training and evaluation in pysc2 is done by running `pysc2_rl/pysc2_runner.p
 
 All settings for a run are set here, though they can be overode from the `batch.json` file and with settings in the experiments files using the option described above. A copy of the config file used is copied into the model directory when a run starts.
 
+Run settings:
 * **use_batch**: whether to do multiple runs with this/each config (boolean)
 * **batch_file**: batch properties if above is set to true (string)
 * **batch_runs**: number of runs (int) 
@@ -55,28 +56,26 @@ All settings for a run are set here, though they can be overode from the `batch.
 * **inference_only_epsilon**: amount of random actions while in inference only mode (float - between 0 and 1)
 * **inference_only_episodes**: number of episodes to do in inference only mode (int)
 
-
+Player settings:
 * **use_scripted_bot**: one of 'noop', 'random', 'attack_weakest', 'attack_weakest_nearest', or '' to not use a scripted bot (string)
 
-
+Training settings:
 * **model_dir**: location to save/load model for current run (string)
 * **model_checkpoint_frequency**: trining step interval for saving model; note model is always saved on last step of training (int)
 * **model_checkpoint_max**: number of checkpoints to keep (int)
 * **model_checkpoint_every_n_hours**: can save every n hours instead (int)
 * **max_steps**: number of steps per run; 0 for no limit (int)
 * **max_episodes**: number of episodes per run; 0 for no limit (int)
-
-
 * **step_penalty**: positive number here is subtracted from step rewards at each step (float)
 * **episode_extra_win_reward**: additional reward for winning an episode (float)
 
-
+Learning rate settings:
 * **learning_rate**: starting learning rate; Adam optimizer is hard-coded currently (float)
 * **learning_rate_decay_method**: 'polynomial' or 'exponential' to decay the learning rate; setting to anything else turns this feature off; doesn't really make sense for Adam (string)
 * **learning_rate_decay_steps**: number of steps to decay lr over (int)
 * **learning_rate_decay_param**: parameter for decay (float)
 
-
+DQN options and some RL and network settings:
 * **double_DQN**: whether to use Double DQN (boolean)
 * **dueling_network**: whether to use dueling network (boolean)
 * **bootstrapping_steps**: n-step bootstrapping (int)
@@ -85,21 +84,21 @@ All settings for a run are set here, though they can be overode from the `batch.
 * **reg_type**: set to one of 'l1' or 'l2' for regularization (string)
 * **reg_scale**: scale the regularization loss (float)
 
-
+Eval episodes:
 * **do_eval_episodes**: whether to do an inference_only episode every so often to track on-policy performance over time (boolean)
 * **train_on_eval_episodes**: record transitions from eval episodes in memory, and do training batches while doing eval episodes
 * **one_eval_episode_per**: every nth step an extra eval episode will be performed if 'do_eval_episodes' is set to true (int)
 
-
+Component-action DQN loss settings:
 * **loss_formula**: one of 'avg_y_compared_to_components', 'avg_y_compared_to_avg_prediction', or 'pairwise_component_comparison'; see [paper](https://www.cs.mun.ca/~z24rmk/publications/aiide20transfer.pdf) for details (string)
 
-
+Memory and DQN settings:
 * **update_frequency**: how often (in steps) we do a training batch (int)
 * **memory_size**: size of experience replay memory (int)
 * **memory_burn_in**: number of experiences to store before starting training (int)
 * **target_update_frequency**: how often (in steps) to copy parameters from primary network to target network (int)
 
-
+PER settings:
 * **use_priority_experience_replay**: whether to use PER (boolean)
 * **per_alpha**: alpha parameter from PER paper (float)
 * **per_starting_beta**: beta parameter from PER paper (float)
@@ -108,7 +107,7 @@ All settings for a run are set here, though they can be overode from the `batch.
 * **match_per_beta_anneal_steps_ratio**: ratio of max training steps to set beta to (float)
 * **avg_component_tds**: set to true to take average of component TD absolute values instead of sum for updating priority of transitions (boolean)
 
-
+epsilon-greedy settings:
 * **initial_epsilon**: starting exploration epsilon (float)
 * **final_epsilon**: ending exploration epsilon (float)
 * **decay_steps**: number of steps over which to decay epsilon (int)
@@ -116,11 +115,11 @@ All settings for a run are set here, though they can be overode from the `batch.
 * **match_epsilon_decay_steps_to_max**: ignore 'decay_steps' and instead anneal epsilon over some percentage of max training steps (boolean)
 * **match_epsilon_decay_steps_ratio**: ratio of max steps to use if above set to true (float)
 
-
+Some debug settings:
 * **debug_logging**: prints out times in ms for some parts of training (boolean)
 * **log_frequency**: averages over given number of training steps (int)
 
-
+Network structure:
 * **network_structure**: defines the network, see below for format (object)
   * **shared_spatial_network**: first part of network (object)
   * **value_network**: value branch if using dueling nets (object)
@@ -137,7 +136,7 @@ All settings for a run are set here, though they can be overode from the `batch.
   * **scale_gradients_at_shared_non_spatial_split**: scales gradients according to number of non-spatial streams where they diverge (boolean)
   * **use_histograms**: output histogram tensorboard data for all variables; takes lots of space (boolean)
 
-
+Environment-specific settings:
 * **env**: properties related to pysc2 (object)
   * **screen_size**: square resolution of screen features (int)
   * **minimap_size**: square resolution of minimap features (int)
